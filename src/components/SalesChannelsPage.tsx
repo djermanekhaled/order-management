@@ -1,0 +1,237 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { supabase } from "../lib/supabase";
+import type { SalesChannel, SalesChannelStatus } from "../types/salesChannel";
+import { SalesChannelModal } from "./SalesChannelModal";
+
+interface SalesChannelsPageProps {
+  channelModalOpen: boolean;
+  onChannelModalOpen: () => void;
+  onChannelModalClose: () => void;
+  onChannelsChanged?: () => void;
+}
+
+export function SalesChannelsPage({
+  channelModalOpen,
+  onChannelModalOpen,
+  onChannelModalClose,
+  onChannelsChanged,
+}: SalesChannelsPageProps) {
+  const [channels, setChannels] = useState<SalesChannel[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [copyStateById, setCopyStateById] = useState<Record<string, "idle" | "copied" | "error">>(
+    {}
+  );
+
+  const origin = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    return window.location.origin;
+  }, []);
+
+  const loadChannels = useCallback(async () => {
+    setError(null);
+    setLoading(true);
+    const { data, error: qErr } = await supabase
+      .from("sales_channels")
+      .select("*")
+      .order("created_at", { ascending: false });
+    setLoading(false);
+    if (qErr) {
+      setError(qErr.message);
+      return;
+    }
+    setChannels((data ?? []) as SalesChannel[]);
+  }, []);
+
+  useEffect(() => {
+    void loadChannels();
+  }, [loadChannels]);
+
+  async function insertChannel(row: {
+    name: string;
+    store_url: string;
+    consumer_key: string;
+    consumer_secret: string;
+  }) {
+    const { error: insErr } = await supabase.from("sales_channels").insert({
+      name: row.name,
+      store_url: row.store_url,
+      consumer_key: row.consumer_key,
+      consumer_secret: row.consumer_secret,
+      status: "active",
+    });
+    if (insErr) throw new Error(insErr.message);
+    await loadChannels();
+    onChannelsChanged?.();
+  }
+
+  async function toggleStatus(id: string, next: SalesChannelStatus) {
+    setError(null);
+    const { error: upErr } = await supabase
+      .from("sales_channels")
+      .update({ status: next })
+      .eq("id", id);
+    if (upErr) {
+      setError(upErr.message);
+      return;
+    }
+    await loadChannels();
+  }
+
+  async function copyWebhookUrl(channelId: string) {
+    const url = origin
+      ? `${origin}/api/woocommerce-webhook?channel_id=${channelId}`
+      : `https://[vercel-domain]/api/woocommerce-webhook?channel_id=${channelId}`;
+
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopyStateById((m) => ({ ...m, [channelId]: "copied" }));
+      window.setTimeout(() => {
+        setCopyStateById((m) => ({ ...m, [channelId]: "idle" }));
+      }, 1200);
+    } catch {
+      setCopyStateById((m) => ({ ...m, [channelId]: "error" }));
+      window.setTimeout(() => {
+        setCopyStateById((m) => ({ ...m, [channelId]: "idle" }));
+      }, 1500);
+    }
+  }
+
+  return (
+    <div className="space-y-8">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-widest text-slate-500">
+            Integrations
+          </p>
+          <h2 className="mt-1 text-2xl font-semibold text-white">Sales channels</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Connect WooCommerce stores. Orders synced from a channel use the
+            channel name as <span className="text-slate-400">source</span>.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void loadChannels()}
+            disabled={loading}
+            className="rounded-xl border border-slate-700 bg-slate-800/50 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+          >
+            {loading ? "Refreshing…" : "Refresh"}
+          </button>
+          <button
+            type="button"
+            onClick={onChannelModalOpen}
+            className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-indigo-900/30 hover:bg-indigo-500"
+          >
+            New channel
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div
+          className="rounded-xl border border-rose-500/40 bg-rose-950/40 px-4 py-3 text-sm text-rose-200"
+          role="alert"
+        >
+          {error}
+        </div>
+      )}
+
+      <section className="overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-900/50 shadow-xl ring-1 ring-white/5">
+        <div className="border-b border-slate-800/80 px-5 py-4">
+          <p className="text-sm text-slate-400">
+            {loading
+              ? "Loading channels…"
+              : `${channels.length} connected channel${channels.length === 1 ? "" : "s"}`}
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[980px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-800/80 text-xs uppercase tracking-wider text-slate-500">
+                <th className="px-5 py-3 font-medium">Name</th>
+                <th className="px-5 py-3 font-medium">Store URL</th>
+                <th className="px-5 py-3 font-medium">Webhook URL</th>
+                <th className="px-5 py-3 font-medium">Status</th>
+                <th className="px-5 py-3 font-medium text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60">
+              {!loading &&
+                channels.map((ch) => (
+                  <tr key={ch.id} className="hover:bg-slate-800/20">
+                    <td className="px-5 py-3 font-medium text-slate-100">
+                      {ch.name}
+                    </td>
+                    <td className="max-w-[280px] truncate px-5 py-3 text-slate-400">
+                      <a
+                        href={ch.store_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-indigo-300 hover:underline"
+                      >
+                        {ch.store_url}
+                      </a>
+                    </td>
+                    <td className="px-5 py-3 text-slate-400">
+                      <div className="flex items-center gap-2">
+                        <code className="max-w-[360px] truncate rounded-lg bg-slate-950 px-2 py-1 text-xs text-slate-200 ring-1 ring-slate-700/70">
+                          {origin
+                            ? `${origin}/api/woocommerce-webhook?channel_id=${ch.id}`
+                            : `https://[vercel-domain]/api/woocommerce-webhook?channel_id=${ch.id}`}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={() => void copyWebhookUrl(ch.id)}
+                          className="rounded-lg border border-slate-600 px-2 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
+                        >
+                          {copyStateById[ch.id] === "copied"
+                            ? "Copied"
+                            : copyStateById[ch.id] === "error"
+                              ? "Copy failed"
+                              : "Copy"}
+                        </button>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3">
+                      <span
+                        className={`inline-flex rounded-lg px-2 py-0.5 text-xs font-semibold ${
+                          ch.status === "active"
+                            ? "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30"
+                            : "bg-slate-600/30 text-slate-300 ring-1 ring-slate-600/50"
+                        }`}
+                      >
+                        {ch.status === "active" ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void toggleStatus(
+                            ch.id,
+                            ch.status === "active" ? "inactive" : "active"
+                          )
+                        }
+                        className="rounded-lg border border-slate-600 px-2 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
+                      >
+                        {ch.status === "active" ? "Deactivate" : "Activate"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <SalesChannelModal
+        open={channelModalOpen}
+        onClose={onChannelModalClose}
+        onSaved={() => {}}
+        insert={insertChannel}
+      />
+    </div>
+  );
+}
