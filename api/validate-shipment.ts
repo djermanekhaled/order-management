@@ -214,9 +214,103 @@ function hubCityNamesSample(
   return [...hubMap.keys()].slice(0, limit);
 }
 
+/** Products array from POST /api/v1/products/search or similar. */
+function extractProductsArray(zrJson: unknown): Record<string, unknown>[] {
+  if (zrJson == null) return [];
+  if (Array.isArray(zrJson)) {
+    return zrJson.filter(
+      (x): x is Record<string, unknown> => x != null && typeof x === "object"
+    );
+  }
+  if (typeof zrJson !== "object") return [];
+  const o = zrJson as Record<string, unknown>;
+  const tryArr = (v: unknown): Record<string, unknown>[] | null => {
+    if (!Array.isArray(v)) return null;
+    return v.filter(
+      (x): x is Record<string, unknown> => x != null && typeof x === "object"
+    );
+  };
+  for (const k of ["products", "results", "items"]) {
+    const inner = tryArr(o[k]);
+    if (inner !== null) return inner;
+  }
+  const data = o.data;
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    const d = data as Record<string, unknown>;
+    for (const k of ["products", "items", "results"]) {
+      const inner = tryArr(d[k]);
+      if (inner !== null) return inner;
+    }
+  }
+  return [];
+}
+
+function extractCreatedProductRecord(
+  zrJson: unknown
+): Record<string, unknown> | null {
+  if (zrJson == null || typeof zrJson !== "object" || Array.isArray(zrJson)) {
+    return null;
+  }
+  const o = zrJson as Record<string, unknown>;
+  if (asTerritoryId(o.id ?? o.productId ?? o.product_id)) {
+    return o;
+  }
+  const data = o.data;
+  if (data != null && typeof data === "object" && !Array.isArray(data)) {
+    const d = data as Record<string, unknown>;
+    if (asTerritoryId(d.id ?? d.productId ?? d.product_id)) {
+      return d;
+    }
+  }
+  return null;
+}
+
+function pickZrProductIdSku(
+  p: Record<string, unknown>
+): { id: string; sku: string } | null {
+  const id = asTerritoryId(p.id ?? p.productId ?? p.product_id);
+  if (!id) return null;
+  let sku =
+    typeof p.sku === "string" && p.sku.trim()
+      ? p.sku.trim()
+      : typeof p.SKU === "string" && p.SKU.trim()
+        ? p.SKU.trim()
+        : "";
+  if (!sku) sku = id.length >= 10 ? id.slice(0, 10) : id;
+  return { id, sku };
+}
+
+function logHubsForWilayaMatching(hubs: Record<string, unknown>[]): void {
+  const rows = hubs.map((h, index) => {
+    const addr =
+      h.address != null && typeof h.address === "object"
+        ? (h.address as Record<string, unknown>)
+        : null;
+    return {
+      index,
+      hubName: typeof h.name === "string" ? h.name : undefined,
+      addressCity: addr && typeof addr.city === "string" ? addr.city : null,
+      addressWilaya:
+        addr && typeof addr.wilaya === "string" ? addr.wilaya : null,
+      addressLine:
+        addr && typeof addr.street === "string" ? addr.street : undefined,
+      cityTerritoryId: h.cityTerritoryId ?? h.cityTerritoryID ?? null,
+      districtTerritoryId: h.districtTerritoryId ?? h.districtTerritoryID ?? null,
+    };
+  });
+  console.log(
+    `${LOG_PREFIX} Hubs returned from ZR (for wilaya ↔ address.city matching):`,
+    JSON.stringify(rows, null, 2)
+  );
+  console.log(
+    `${LOG_PREFIX} Hub count: ${hubs.length}; map keys built: ${rows.map((r) => r.addressCity).filter(Boolean).join(" | ") || "(none)"}`
+  );
+}
+
 function buildZrParcel(
   order: DbOrder,
-  territory: { cityTerritoryId: string; districtTerritoryId: string }
+  territory: { cityTerritoryId: string; districtTerritoryId: string },
+  zrProduct: { productId: string; sku: string }
 ) {
   return {
     stockType: "local",
@@ -234,6 +328,8 @@ function buildZrParcel(
     },
     orderedProducts: [
       {
+        productId: zrProduct.productId,
+        sku: zrProduct.sku,
         productName: order.product,
         quantity: order.quantity,
         stockType: "local",
@@ -561,6 +657,98 @@ async function zrRequestWithAuthVariants(
   return last;
 }
 
+async function resolveZrProductIdSku(
+  productName: string,
+  unitPrice: number,
+  xTenantId: string,
+  secretKey: string
+): Promise<{ productId: string; sku: string; source: "search" | "created" }> {
+  const keyword = productName.trim();
+  if (!keyword) {
+    throw new Error("Product name is empty");
+  }
+
+  const searchUrl = `${ZR_BASE}/api/v1/products/search`;
+  const searchBody = JSON.stringify({ keyword, pageSize: 10 });
+  const searchOut = await zrRequestWithAuthVariants(
+    searchUrl,
+    { method: "POST", body: searchBody },
+    xTenantId,
+    secretKey
+  );
+
+  if (!searchOut.res.ok) {
+    const msg = zrExpressErrorMessage(
+      searchOut.res.status,
+      searchOut.json,
+      searchOut.text
+    );
+    throw new Error(
+      `ZR products/search failed (${searchOut.res.status}): ${msg}`
+    );
+  }
+
+  const foundList = extractProductsArray(searchOut.json);
+  console.log(
+    `${LOG_PREFIX} products/search keyword="${keyword}" → ${foundList.length} result(s)`
+  );
+  for (const p of foundList) {
+    const picked = pickZrProductIdSku(p);
+    if (picked) {
+      console.log(
+        `${LOG_PREFIX} Using ZR catalog product id=${picked.id} sku=${picked.sku} (search)`
+      );
+      return { productId: picked.id, sku: picked.sku, source: "search" };
+    }
+  }
+
+  const skuNew = keyword.length <= 10 ? keyword : keyword.slice(0, 10);
+  const createUrl = `${ZR_BASE}/api/v1/products`;
+  const createBody = JSON.stringify({
+    name: keyword,
+    sku: skuNew,
+    unitPrice: Number(unitPrice),
+    stockType: "local",
+  });
+  const createOut = await zrRequestWithAuthVariants(
+    createUrl,
+    { method: "POST", body: createBody },
+    xTenantId,
+    secretKey
+  );
+
+  if (!createOut.res.ok) {
+    const msg = zrExpressErrorMessage(
+      createOut.res.status,
+      createOut.json,
+      createOut.text
+    );
+    throw new Error(
+      `ZR products create failed (${createOut.res.status}): ${msg}`
+    );
+  }
+
+  const createdObj =
+    extractCreatedProductRecord(createOut.json) ??
+    (createOut.json != null &&
+    typeof createOut.json === "object" &&
+    !Array.isArray(createOut.json)
+      ? (createOut.json as Record<string, unknown>)
+      : null);
+
+  if (!createdObj) {
+    throw new Error("ZR products create: could not parse product from response");
+  }
+  const picked = pickZrProductIdSku(createdObj);
+  if (!picked) {
+    throw new Error("ZR products create: missing product id in response");
+  }
+  console.log(
+    `${LOG_PREFIX} Created ZR product id=${picked.id} sku=${picked.sku}`
+  );
+  return { productId: picked.id, sku: picked.sku, source: "created" };
+}
+
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
@@ -705,6 +893,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   }
 
   const hubsList = extractHubsArray(hubsOutcome.json);
+  logHubsForWilayaMatching(hubsList);
+
   const hubCityMap = buildHubCityTerritoryMap(hubsList);
   const territoryListSource =
     hubCityMap.size > 0
@@ -742,7 +932,26 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       });
       continue;
     }
+    console.log(`${LOG_PREFIX} Wilaya match attempt`, {
+      orderId: order.id,
+      orderWilaya: w,
+      hubCityKeysAvailable: [...hubCityMap.keys()],
+    });
     const resolved = resolveTerritoryFromHubMap(w, hubCityMap);
+    if (resolved.source === "supplier_default_fallback") {
+      console.log(
+        `${LOG_PREFIX} No hub match for wilaya="${w}" — using fallback territories`,
+        {
+          cityTerritoryId: ZR_SUPPLIER_DEFAULT_CITY_TERRITORY_ID,
+          districtTerritoryId: ZR_SUPPLIER_DEFAULT_DISTRICT_TERRITORY_ID,
+        }
+      );
+    } else {
+      console.log(`${LOG_PREFIX} Matched wilaya="${w}" to hub city`, {
+        cityTerritoryId: resolved.cityTerritoryId,
+        districtTerritoryId: resolved.districtTerritoryId,
+      });
+    }
     territoryByOrder.set(order.id, {
       cityTerritoryId: resolved.cityTerritoryId,
       districtTerritoryId: resolved.districtTerritoryId,
@@ -773,9 +982,50 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return;
   }
 
-  const parcels = list.map((order) =>
-    buildZrParcel(order, territoryByOrder.get(order.id)!)
-  );
+  const zrProductCacheByKeyword = new Map<
+    string,
+    { productId: string; sku: string }
+  >();
+
+  for (const order of list) {
+    const kw = order.product.trim();
+    if (!kw) {
+      res.status(400).json({
+        error: `Order ${order.id} has an empty product name.`,
+      });
+      return;
+    }
+    if (zrProductCacheByKeyword.has(kw)) continue;
+    try {
+      const r = await resolveZrProductIdSku(
+        kw,
+        Number(order.amount),
+        xTenantId,
+        company.secret_key
+      );
+      zrProductCacheByKeyword.set(kw, {
+        productId: r.productId,
+        sku: r.sku,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      res.status(502).json({
+        error: msg,
+        zrStep: "products_search_or_create",
+      });
+      return;
+    }
+  }
+
+  const parcels = list.map((order) => {
+    const kw = order.product.trim();
+    const zrProd = zrProductCacheByKeyword.get(kw)!;
+    return buildZrParcel(
+      order,
+      territoryByOrder.get(order.id)!,
+      zrProd
+    );
+  });
   const zrUrl = `${ZR_BASE}/api/v1/parcels/bulk`;
   const requestBody = JSON.stringify({ parcels });
 
