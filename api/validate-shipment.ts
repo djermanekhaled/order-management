@@ -26,11 +26,6 @@ type DbOrder = {
 
 const ZR_BASE = "https://api.zrexpress.app";
 
-/** Real ZR Express tenant UUID for X-Tenant (not the supplier/account id from delivery_companies.tenant_id). */
-const ZR_X_TENANT_ID =
-  process.env.ZR_X_TENANT_ID?.trim() ||
-  "da659108-041c-409e-abb9-ef145cca86a1";
-
 /**
  * Default city/district when wilaya is unknown or territories API returns nothing.
  * Override with ZR_DEFAULT_CITY_TERRITORY_ID / ZR_DEFAULT_DISTRICT_TERRITORY_ID (supplier location).
@@ -439,6 +434,13 @@ function buildZrRequestHeaders(
   return headers;
 }
 
+/** Log preview: first 10 characters only (rest redacted). */
+function first10LogPreview(value: string | undefined): string {
+  if (value == null || value === "") return "(empty)";
+  if (value.length <= 10) return value;
+  return `${value.slice(0, 10)}…`;
+}
+
 function logFullZrOutboundRequest(
   method: string,
   url: string,
@@ -453,7 +455,36 @@ function logFullZrOutboundRequest(
     `${LOG_PREFIX}   Auth attempt:`,
     zrAuthVariantDescription(authVariant)
   );
-  console.log(`${LOG_PREFIX}   Headers (full values):`, { ...headers });
+  console.log(
+    `${LOG_PREFIX}   X-Tenant in use (first 10 chars):`,
+    first10LogPreview(headers["X-Tenant"])
+  );
+  const apiKey = headers["X-Api-Key"];
+  console.log(
+    `${LOG_PREFIX}   X-Api-Key in use (first 10 chars):`,
+    apiKey !== undefined
+      ? first10LogPreview(apiKey)
+      : "(not sent for this attempt — using Authorization header)"
+  );
+  const safeHeaders: Record<string, string> = { ...headers };
+  if (safeHeaders["X-Tenant"] !== undefined) {
+    safeHeaders["X-Tenant"] = first10LogPreview(safeHeaders["X-Tenant"]);
+  }
+  if (safeHeaders["X-Api-Key"] !== undefined) {
+    safeHeaders["X-Api-Key"] = first10LogPreview(safeHeaders["X-Api-Key"]);
+  }
+  if (safeHeaders.Authorization !== undefined) {
+    const a = safeHeaders.Authorization;
+    const bearer = /^Bearer\s+/i.test(a);
+    const secret = bearer ? a.replace(/^Bearer\s+/i, "") : a;
+    safeHeaders.Authorization = bearer
+      ? `Bearer ${first10LogPreview(secret)}`
+      : first10LogPreview(a);
+  }
+  console.log(
+    `${LOG_PREFIX}   Headers (sensitive values truncated to 10 chars):`,
+    safeHeaders
+  );
   console.log(`${LOG_PREFIX}   Body (complete):`, body);
 }
 
@@ -716,12 +747,18 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
   }
 
-  const supplierId = company.tenant_id;
+  const xTenantId = company.tenant_id.trim();
+  const supplierId = xTenantId;
   const supplierUrl = `${ZR_BASE}/api/v1/supplier/${encodeURIComponent(supplierId)}`;
   const supplierRequestBody = JSON.stringify({
     supplierId,
     includeTerritories: true,
   });
+
+  console.log(
+    `${LOG_PREFIX} Using delivery_companies.tenant_id as X-Tenant (first 10 chars):`,
+    first10LogPreview(xTenantId)
+  );
 
   let supplierOutcome: Awaited<
     ReturnType<typeof zrRequestWithAuthVariants>
@@ -730,7 +767,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     supplierOutcome = await zrRequestWithAuthVariants(
       supplierUrl,
       { method: "POST", body: supplierRequestBody },
-      ZR_X_TENANT_ID,
+      xTenantId,
       company.secret_key
     );
   } catch (e) {
@@ -782,7 +819,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         const tOut = await zrRequestWithAuthVariants(
           tUrl,
           { method: "GET", body: undefined },
-          ZR_X_TENANT_ID,
+          xTenantId,
           company.secret_key
         );
         if (tOut.res.ok) {
@@ -807,7 +844,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
   if (territoryRoots.length === 0) {
     console.log(
-      `${LOG_PREFIX} No territory tree from ZR; using hardcoded wilaya map and default city/district fallbacks (X-Tenant ${ZR_X_TENANT_ID})`
+      `${LOG_PREFIX} No territory tree from ZR; using hardcoded wilaya map and default city/district fallbacks (X-Tenant first 10 chars: ${first10LogPreview(xTenantId)})`
     );
   }
 
@@ -874,7 +911,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     bulkOutcome = await zrRequestWithAuthVariants(
       zrUrl,
       { method: "POST", body: requestBody },
-      ZR_X_TENANT_ID,
+      xTenantId,
       company.secret_key
     );
   } catch (e) {
@@ -991,7 +1028,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     updated,
     zrResultCount: results.length,
     zrAuthorizationVariant: zrAuthVariantDescription(zrAuthVariantUsed),
-    zrXTenantId: ZR_X_TENANT_ID,
+    zrXTenantId: xTenantId,
     zrTerritoryListSource: territoryListSource,
     territoryResolutionSources: [...new Set(territorySources)],
     warnings: successWarnings.length ? successWarnings : undefined,
