@@ -1,6 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import { createClient } from "@supabase/supabase-js";
-import { buildOrderRowFromWooCommerce, wooOrderNote, type WooOrderPayload } from "./wooOrderMapping";
+import { buildOrderRowFromWooCommerce, wooOrderNote, type WooOrderPayload } from "./wooOrderMapping.js";
 
 type ApiRequest = IncomingMessage & {
   query?: Record<string, string | string[] | undefined>;

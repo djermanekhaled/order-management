@@ -1,6 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import { createClient } from "@supabase/supabase-js";
-import { buildOrderRowFromWooCommerce, type WooOrderPayload } from "./wooOrderMapping";
+import { buildOrderRowFromWooCommerce, type WooOrderPayload } from "./wooOrderMapping.js";
 
 /**
  * Vercel passes a Node-style request with parsed `query` and `body`.
