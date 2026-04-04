@@ -122,6 +122,77 @@ function referenceFromResult(item: unknown): string | null {
   return null;
 }
 
+const LOG_PREFIX = "[validate-shipment]";
+
+/** Authorization: Bearer with only first 5 chars of the secret visible. */
+function maskAuthorizationHeader(secretKey: string): string {
+  const key = String(secretKey ?? "");
+  const prefix = key.slice(0, 5);
+  if (key.length <= 5) {
+    return `Bearer ${prefix || "(empty)"}[masked]`;
+  }
+  return `Bearer ${prefix}…[masked]`;
+}
+
+function zrRequestHeadersForLog(
+  headers: Record<string, string>,
+  secretKey: string
+): Record<string, string> {
+  return {
+    ...headers,
+    Authorization: maskAuthorizationHeader(secretKey),
+  };
+}
+
+/**
+ * Best-effort human-readable message from ZR Express error responses.
+ */
+function zrExpressErrorMessage(
+  httpStatus: number,
+  zrJson: unknown,
+  zrText: string
+): string {
+  if (zrJson && typeof zrJson === "object" && !Array.isArray(zrJson)) {
+    const o = zrJson as Record<string, unknown>;
+    const direct = o.message ?? o.detail ?? o.title;
+    if (typeof direct === "string" && direct.trim()) return direct.trim();
+
+    const errField = o.error;
+    if (typeof errField === "string" && errField.trim()) return errField.trim();
+    if (errField && typeof errField === "object" && !Array.isArray(errField)) {
+      const nested = errField as Record<string, unknown>;
+      const nm = nested.message ?? nested.error ?? nested.detail;
+      if (typeof nm === "string" && nm.trim()) return nm.trim();
+    }
+
+    if (Array.isArray(o.errors)) {
+      const parts = o.errors
+        .map((item) => {
+          if (typeof item === "string") return item;
+          if (item && typeof item === "object") {
+            const e = item as Record<string, unknown>;
+            const m = e.message ?? e.error ?? e.detail;
+            if (typeof m === "string" && m.trim()) return m.trim();
+          }
+          return null;
+        })
+        .filter((s): s is string => Boolean(s));
+      if (parts.length) return parts.join("; ");
+    }
+
+    const data = o.data;
+    if (data && typeof data === "object" && !Array.isArray(data)) {
+      const d = data as Record<string, unknown>;
+      const m = d.message ?? d.error ?? d.detail;
+      if (typeof m === "string" && m.trim()) return m.trim();
+    }
+  }
+
+  const trimmed = zrText.trim();
+  if (trimmed) return trimmed.length > 2000 ? `${trimmed.slice(0, 2000)}…` : trimmed;
+  return `ZR Express returned HTTP ${httpStatus}`;
+}
+
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
@@ -214,23 +285,37 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   const parcels = list.map(mapOrderToZrParcel);
   const zrUrl = `${ZR_BASE}/api/v1/parcels/bulk`;
 
+  const zrHeaders: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    "X-Tenant": company.tenant_id,
+    // ZR Express: secretKey is sent as Bearer (not a separate token type).
+    Authorization: `Bearer ${company.secret_key}`,
+  };
+
+  console.log(`${LOG_PREFIX} ZR Express request URL:`, zrUrl);
+  console.log(
+    `${LOG_PREFIX} ZR Express request headers:`,
+    zrRequestHeadersForLog(zrHeaders, company.secret_key)
+  );
+
   let zrRes: Response;
   try {
     zrRes = await fetch(zrUrl, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        "X-Tenant": company.tenant_id,
-        // ZR Express: secretKey is sent as Bearer (not a separate token type).
-        Authorization: `Bearer ${company.secret_key}`,
-      },
+      headers: zrHeaders,
       body: JSON.stringify({ parcels }),
     });
   } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`${LOG_PREFIX} ZR Express fetch failed`, {
+      url: zrUrl,
+      headers: zrRequestHeadersForLog(zrHeaders, company.secret_key),
+      error: msg,
+    });
     res.status(502).json({
-      error: "Failed to reach ZR Express API",
-      details: e instanceof Error ? e.message : String(e),
+      error: `Failed to reach ZR Express API: ${msg}`,
+      zrUrl,
     });
     return;
   }
@@ -243,11 +328,20 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     zrJson = null;
   }
 
+  console.log(`${LOG_PREFIX} ZR Express response status:`, zrRes.status);
+  console.log(`${LOG_PREFIX} ZR Express response body:`, zrText);
+
   if (!zrRes.ok) {
-    res.status(502).json({
-      error: "ZR Express API error",
+    const zrMessage = zrExpressErrorMessage(zrRes.status, zrJson, zrText);
+    console.error(`${LOG_PREFIX} ZR Express error`, {
       status: zrRes.status,
-      details: typeof zrJson === "object" && zrJson !== null ? zrJson : zrText.slice(0, 800),
+      message: zrMessage,
+      body: zrText,
+    });
+    res.status(502).json({
+      error: zrMessage,
+      zrStatus: zrRes.status,
+      zrBody: zrJson !== null ? zrJson : zrText,
     });
     return;
   }
