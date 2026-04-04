@@ -28,7 +28,7 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
-export type AppView = "orders" | "sales_channels";
+export type AppView = "orders" | "sales_channels" | "products";
 
 interface AppSidebarProps {
   orders: Order[];
@@ -40,6 +40,8 @@ interface AppSidebarProps {
   onViewChange: (view: AppView) => void;
   salesChannelCount: number;
   onAddSalesChannel: () => void;
+  activeProductCount: number;
+  onAddProduct: () => void;
 }
 
 function NavRow({
@@ -79,6 +81,8 @@ export function AppSidebar({
   onViewChange,
   salesChannelCount,
   onAddSalesChannel,
+  activeProductCount,
+  onAddProduct,
 }: AppSidebarProps) {
   const [ordersOpen, setOrdersOpen] = useState(true);
 
@@ -288,6 +292,52 @@ export function AppSidebar({
                 }}
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-slate-800/60 text-lg font-semibold leading-none text-indigo-200 hover:border-indigo-500/50 hover:bg-slate-800"
                 title="Add sales channel"
+              >
+                +
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-2 rounded-xl border border-slate-800/60 bg-slate-900/40 p-1">
+            <div className="flex items-center gap-1 px-1 py-1">
+              <button
+                type="button"
+                onClick={() => onViewChange("products")}
+                className={`flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-sm font-medium transition ${
+                  activeView === "products"
+                    ? "bg-indigo-600/25 text-white ring-1 ring-indigo-500/40"
+                    : "text-slate-200 hover:bg-slate-800/60"
+                }`}
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-600/30 text-amber-200">
+                    <svg
+                      className="h-4 w-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+                      />
+                    </svg>
+                  </span>
+                  <span className="truncate">Products</span>
+                </span>
+                <Badge n={activeProductCount} />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onViewChange("products");
+                  onAddProduct();
+                }}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-slate-800/60 text-lg font-semibold leading-none text-indigo-200 hover:border-indigo-500/50 hover:bg-slate-800"
+                title="Add product"
               >
                 +
               </button>

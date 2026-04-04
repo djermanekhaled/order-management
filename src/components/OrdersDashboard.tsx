@@ -23,6 +23,7 @@ import type {
 import { AppSidebar } from "./AppSidebar";
 import { OrderFormModal } from "./OrderFormModal";
 import { OrderHistoryPanel } from "./OrderHistoryPanel";
+import { ProductsPage } from "./ProductsPage";
 import { SalesChannelsPage } from "./SalesChannelsPage";
 
 function formatMoneyDzd(n: number) {
@@ -64,11 +65,14 @@ export function OrdersDashboard() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sidebarView, setSidebarView] = useState<"orders" | "sales_channels">(
-    "orders"
-  );
+  const [sidebarView, setSidebarView] = useState<
+    "orders" | "sales_channels" | "products"
+  >("orders");
   const [channelModalOpen, setChannelModalOpen] = useState(false);
+  const [productModalOpen, setProductModalOpen] = useState(false);
+  const [productFreshKey, setProductFreshKey] = useState(0);
   const [channelCount, setChannelCount] = useState(0);
+  const [activeProductCount, setActiveProductCount] = useState(0);
   const [navKey, setNavKey] = useState<SidebarNavKey>("all");
   const [subStatusFilter, setSubStatusFilter] = useState<OrderSubStatus | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -154,6 +158,22 @@ export function OrdersDashboard() {
   useEffect(() => {
     void loadChannelCount();
   }, [loadChannelCount]);
+
+  const loadActiveProductCount = useCallback(async () => {
+    const { count } = await supabase
+      .from("products")
+      .select("*", { count: "exact", head: true })
+      .eq("active", true);
+    setActiveProductCount(count ?? 0);
+  }, []);
+
+  const onProductsChanged = useCallback(() => {
+    void loadActiveProductCount();
+  }, [loadActiveProductCount]);
+
+  useEffect(() => {
+    void loadActiveProductCount();
+  }, [loadActiveProductCount]);
 
   async function handleSaveOrder(
     values: OrderFormValues,
@@ -274,14 +294,28 @@ export function OrdersDashboard() {
         }}
         collapsed={sidebarCollapsed}
         onToggleCollapsed={() => setSidebarCollapsed((c) => !c)}
-        activeView={sidebarView === "sales_channels" ? "sales_channels" : "orders"}
-        onViewChange={(v) =>
-          setSidebarView(v === "sales_channels" ? "sales_channels" : "orders")
+        activeView={
+          sidebarView === "sales_channels"
+            ? "sales_channels"
+            : sidebarView === "products"
+              ? "products"
+              : "orders"
         }
+        onViewChange={(v) => {
+          if (v === "sales_channels") setSidebarView("sales_channels");
+          else if (v === "products") setSidebarView("products");
+          else setSidebarView("orders");
+        }}
         salesChannelCount={channelCount}
         onAddSalesChannel={() => {
           setSidebarView("sales_channels");
           setChannelModalOpen(true);
+        }}
+        activeProductCount={activeProductCount}
+        onAddProduct={() => {
+          setSidebarView("products");
+          setProductFreshKey((k) => k + 1);
+          setProductModalOpen(true);
         }}
       />
 
@@ -292,6 +326,14 @@ export function OrdersDashboard() {
             onChannelModalOpen={() => setChannelModalOpen(true)}
             onChannelModalClose={() => setChannelModalOpen(false)}
             onChannelsChanged={onChannelsChanged}
+          />
+        ) : sidebarView === "products" ? (
+          <ProductsPage
+            productModalOpen={productModalOpen}
+            onProductModalOpen={() => setProductModalOpen(true)}
+            onProductModalClose={() => setProductModalOpen(false)}
+            onProductsChanged={onProductsChanged}
+            productFreshKey={productFreshKey}
           />
         ) : (
           <>
