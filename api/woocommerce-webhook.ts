@@ -73,6 +73,7 @@ export default async function handler(req: WebhookRequest, res: WebhookResponse)
 
   const channelId =
     typeof req.query?.channel_id === "string" ? req.query.channel_id : null;
+  console.log("[woocommerce-webhook] channel_id received:", channelId);
   if (!channelId) {
     res.status(400).json({ error: "Missing channel_id" });
     return;
@@ -85,6 +86,11 @@ export default async function handler(req: WebhookRequest, res: WebhookResponse)
     return;
   }
 
+  console.log(
+    "[woocommerce-webhook] SUPABASE_URL (first 20 chars):",
+    supabaseUrl.slice(0, 20)
+  );
+
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
@@ -94,6 +100,9 @@ export default async function handler(req: WebhookRequest, res: WebhookResponse)
     .select("id, name")
     .eq("id", channelId)
     .single();
+
+  console.log("[woocommerce-webhook] channel lookup error:", chErr);
+  console.log("[woocommerce-webhook] channel data:", channel);
 
   if (chErr || !channel) {
     res.status(404).json({ error: "Unknown channel" });
