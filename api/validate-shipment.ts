@@ -124,7 +124,58 @@ function referenceFromResult(item: unknown): string | null {
 
 const LOG_PREFIX = "[validate-shipment]";
 
-type ZrAuthVariant = "bearer" | "raw_secret";
+type ZrAuthVariant = "x_api_key" | "bearer" | "raw_secret";
+
+function zrAuthVariantDescription(variant: ZrAuthVariant): string {
+  switch (variant) {
+    case "x_api_key":
+      return "X-Api-Key: {secretKey} (no Authorization header)";
+    case "bearer":
+      return "Authorization: Bearer {secretKey}";
+    case "raw_secret":
+      return "Authorization: {secretKey} (no Bearer prefix)";
+  }
+}
+
+function buildZrRequestHeaders(
+  variant: ZrAuthVariant,
+  tenantId: string,
+  secretKey: string
+): Record<string, string> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    "X-Tenant": tenantId,
+  };
+  if (variant === "x_api_key") {
+    headers["X-Api-Key"] = secretKey;
+    return headers;
+  }
+  if (variant === "bearer") {
+    headers.Authorization = `Bearer ${secretKey}`;
+    return headers;
+  }
+  headers.Authorization = secretKey;
+  return headers;
+}
+
+function logFullZrOutboundRequest(
+  method: string,
+  url: string,
+  headers: Record<string, string>,
+  body: string,
+  authVariant: ZrAuthVariant
+): void {
+  console.log(`${LOG_PREFIX} ZR Express FULL outbound request`);
+  console.log(`${LOG_PREFIX}   Method:`, method);
+  console.log(`${LOG_PREFIX}   URL:`, url);
+  console.log(
+    `${LOG_PREFIX}   Auth attempt:`,
+    zrAuthVariantDescription(authVariant)
+  );
+  console.log(`${LOG_PREFIX}   Headers (full values):`, { ...headers });
+  console.log(`${LOG_PREFIX}   Body (complete):`, body);
+}
 
 /**
  * Best-effort human-readable message from ZR Express error responses.
@@ -268,39 +319,22 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   const zrUrl = `${ZR_BASE}/api/v1/parcels/bulk`;
   const requestBody = JSON.stringify({ parcels });
 
-  const variants: ZrAuthVariant[] = ["bearer", "raw_secret"];
+  const variants: ZrAuthVariant[] = ["x_api_key", "bearer", "raw_secret"];
   let zrRes: Response | undefined;
   let zrText = "";
   let zrJson: unknown = null;
-  let zrAuthVariantUsed: ZrAuthVariant = "bearer";
+  let zrAuthVariantUsed: ZrAuthVariant = "x_api_key";
 
   try {
     for (let i = 0; i < variants.length; i++) {
       const variant = variants[i];
-      const authorizationExact =
-        variant === "bearer"
-          ? `Bearer ${company.secret_key}`
-          : company.secret_key;
-
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        "X-Tenant": company.tenant_id,
-        Authorization: authorizationExact,
-      };
-
-      console.log(`${LOG_PREFIX} ZR Express request URL:`, zrUrl);
-      console.log(`${LOG_PREFIX} X-Tenant (exact):`, company.tenant_id);
-      console.log(
-        `${LOG_PREFIX} Authorization variant in use:`,
-        variant === "bearer"
-          ? "1) Bearer {secretKey}"
-          : "2) {secretKey} without Bearer prefix"
+      const headers = buildZrRequestHeaders(
+        variant,
+        company.tenant_id,
+        company.secret_key
       );
-      console.log(
-        `${LOG_PREFIX} Authorization header (exact value sent):`,
-        authorizationExact
-      );
+
+      logFullZrOutboundRequest("POST", zrUrl, headers, requestBody, variant);
 
       zrRes = await fetch(zrUrl, {
         method: "POST",
@@ -327,22 +361,21 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       if (zrRes.ok) {
         zrAuthVariantUsed = variant;
         console.log(
-          `${LOG_PREFIX} ZR Express accepted this authorization variant:`,
-          variant === "bearer"
-            ? "Bearer {secretKey}"
-            : "{secretKey} without Bearer prefix"
+          `${LOG_PREFIX} ZR Express accepted auth method:`,
+          zrAuthVariantDescription(variant)
         );
         break;
       }
 
-      const retryWithRaw =
-        variant === "bearer" &&
-        (zrRes.status === 401 || zrRes.status === 403) &&
-        i < variants.length - 1;
+      const authRejected =
+        zrRes.status === 401 || zrRes.status === 403;
+      const hasNext = i < variants.length - 1;
 
-      if (retryWithRaw) {
+      if (authRejected && hasNext) {
+        const next = variants[i + 1];
         console.log(
-          `${LOG_PREFIX} Bearer auth returned HTTP ${zrRes.status}; retrying with Authorization: {secretKey} only (no Bearer prefix)`
+          `${LOG_PREFIX} Auth rejected (HTTP ${zrRes.status}); next attempt:`,
+          zrAuthVariantDescription(next)
         );
         continue;
       }
@@ -368,7 +401,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (!zrRes.ok) {
     const zrMessage = zrExpressErrorMessage(zrRes.status, zrJson, zrText);
     console.error(`${LOG_PREFIX} ZR Express error`, {
-      authorizationVariantLastUsed: zrAuthVariantUsed,
+      authMethodLastUsed: zrAuthVariantDescription(zrAuthVariantUsed),
       status: zrRes.status,
       message: zrMessage,
       body: zrText,
@@ -377,10 +410,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       error: zrMessage,
       zrStatus: zrRes.status,
       zrBody: zrJson !== null ? zrJson : zrText,
-      zrAuthorizationVariant:
-        zrAuthVariantUsed === "bearer"
-          ? "Bearer {secretKey}"
-          : "{secretKey} without Bearer prefix",
+      zrAuthorizationVariant: zrAuthVariantDescription(zrAuthVariantUsed),
     });
     return;
   }
@@ -438,10 +468,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     ok: true,
     updated,
     zrResultCount: results.length,
-    zrAuthorizationVariant:
-      zrAuthVariantUsed === "bearer"
-        ? "Bearer {secretKey}"
-        : "{secretKey} without Bearer prefix",
+    zrAuthorizationVariant: zrAuthVariantDescription(zrAuthVariantUsed),
     warnings:
       results.length === 0
         ? [
