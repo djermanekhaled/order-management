@@ -1,5 +1,19 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { IncomingMessage } from "node:http";
 import { createClient } from "@supabase/supabase-js";
+
+/**
+ * Vercel passes a Node-style request with parsed `query` and `body`.
+ * `IncomingMessage` covers method/headers; we extend with what the runtime adds.
+ */
+type WebhookRequest = IncomingMessage & {
+  query?: Record<string, string | string[] | undefined>;
+  body?: unknown;
+};
+
+/** Vercel's response helper (not on std `ServerResponse` typings). */
+type WebhookResponse = {
+  status: (code: number) => { json: (body: unknown) => void };
+};
 
 type WooOrder = {
   id?: number;
@@ -18,7 +32,7 @@ type WooOrder = {
   }>;
 };
 
-function parseWooOrderBody(req: VercelRequest): WooOrder | null {
+function parseWooOrderBody(req: WebhookRequest): WooOrder | null {
   const b = req.body;
   if (b == null || b === "") return null;
   if (typeof b === "string") {
@@ -51,13 +65,14 @@ function mapWooStatus(status: string | undefined): "new" | "under_process" | "co
   return "new";
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: WebhookRequest, res: WebhookResponse) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;
   }
 
-  const channelId = typeof req.query.channel_id === "string" ? req.query.channel_id : null;
+  const channelId =
+    typeof req.query?.channel_id === "string" ? req.query.channel_id : null;
   if (!channelId) {
     res.status(400).json({ error: "Missing channel_id" });
     return;
