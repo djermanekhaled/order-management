@@ -1,5 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import { createClient } from "@supabase/supabase-js";
+import { buildOrderRowFromWooCommerce, wooOrderNote, type WooOrderPayload } from "./wooOrderMapping";
 
 type ApiRequest = IncomingMessage & {
   query?: Record<string, string | string[] | undefined>;
@@ -8,23 +9,6 @@ type ApiRequest = IncomingMessage & {
 
 type ApiResponse = {
   status: (code: number) => { json: (body: unknown) => void };
-};
-
-type WooOrder = {
-  id?: number;
-  status?: string;
-  total?: string;
-  billing?: {
-    first_name?: string;
-    last_name?: string;
-    phone?: string;
-    address_1?: string;
-    state?: string;
-  };
-  line_items?: Array<{
-    name?: string;
-    quantity?: number;
-  }>;
 };
 
 function parseJsonBody(req: ApiRequest): unknown | null {
@@ -54,47 +38,6 @@ function parseChannelIdFromBody(req: ApiRequest): string | null {
   const id = (raw as { channel_id?: unknown }).channel_id;
   if (typeof id !== "string" || !id.trim()) return null;
   return id.trim();
-}
-
-function wooOrderNote(wcId: number): string {
-  return `WooCommerce order #${wcId}`;
-}
-
-function mapWooStatus(status: string | undefined): "new" | "under_process" | "completed" | "cancelled" {
-  if (!status) return "new";
-  const s = status.toLowerCase();
-  if (s === "pending") return "new";
-  if (s === "processing" || s === "on-hold") return "under_process";
-  if (s === "completed") return "completed";
-  if (s === "cancelled" || s === "failed" || s === "refunded") return "cancelled";
-  return "new";
-}
-
-function mapWooToRow(wc: WooOrder, sourceName: string) {
-  const first = wc.billing?.first_name?.trim() ?? "";
-  const last = wc.billing?.last_name?.trim() ?? "";
-  const customerName = [first, last].filter(Boolean).join(" ").trim() || "WooCommerce Customer";
-  const item0 = wc.line_items?.[0];
-  const product = item0?.name?.trim() || "WooCommerce item";
-  const quantity =
-    Number.isFinite(item0?.quantity) && (item0?.quantity ?? 0) > 0 ? (item0?.quantity as number) : 1;
-  const amount = Number(wc.total ?? 0);
-  const wcId = wc.id;
-
-  return {
-    customer_name: customerName,
-    phone: wc.billing?.phone?.trim() ?? "",
-    address: wc.billing?.address_1?.trim() ?? "",
-    wilaya: wc.billing?.state?.trim() ?? "",
-    product,
-    quantity,
-    amount: Number.isFinite(amount) ? amount : 0,
-    notes: wcId != null ? wooOrderNote(wcId) : "WooCommerce order",
-    status: mapWooStatus(wc.status),
-    sub_status: null as null,
-    delivery_company: "",
-    source: sourceName,
-  };
 }
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
@@ -159,14 +102,14 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return;
   }
 
-  let orders: WooOrder[];
+  let orders: WooOrderPayload[];
   try {
     const parsed: unknown = await wcRes.json();
     if (!Array.isArray(parsed)) {
       res.status(502).json({ error: "Unexpected WooCommerce response (not an array)" });
       return;
     }
-    orders = parsed as WooOrder[];
+    orders = parsed as WooOrderPayload[];
   } catch {
     res.status(502).json({ error: "Invalid JSON from WooCommerce" });
     return;
@@ -184,7 +127,6 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       continue;
     }
 
-    // Same marker as webhook imports: "WooCommerce order #<id>". Dedupe by exact notes match.
     const noteKey = wooOrderNote(wcId);
     const { data: existing } = await supabaseAdmin
       .from("orders")
@@ -197,7 +139,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       continue;
     }
 
-    const row = mapWooToRow(wc, channel.name);
+    const row = buildOrderRowFromWooCommerce(wc, channel.name);
     const { error: insErr } = await supabaseAdmin.from("orders").insert(row);
     if (insErr) {
       failed += 1;

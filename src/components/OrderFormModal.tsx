@@ -266,7 +266,7 @@ export function OrderFormModal({
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300">
-                Amount (DZD)
+                Items (DZD, excl. shipping)
               </label>
               <input
                 type="number"

@@ -10,6 +10,8 @@ create table if not exists public.orders (
   product text not null,
   quantity integer not null default 1 check (quantity >= 1),
   amount numeric(12, 2) not null check (amount >= 0),
+  shipping_cost numeric(12, 2) not null default 0 check (shipping_cost >= 0),
+  total_amount numeric(12, 2) not null default 0 check (total_amount >= 0),
   notes text not null default '',
   status text not null default 'new'
     check (status in (

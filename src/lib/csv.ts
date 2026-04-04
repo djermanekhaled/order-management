@@ -1,6 +1,12 @@
 import { statusLabel, subStatusLabel } from "./orderWorkflow";
 import type { Order } from "../types/order";
 
+function orderGrandTotal(o: Order): number {
+  const t = o.total_amount;
+  if (t != null && Number.isFinite(Number(t))) return Number(t);
+  return Number(o.amount) + Number(o.shipping_cost ?? 0);
+}
+
 function escapeCell(value: string): string {
   if (/[",\n\r]/.test(value)) {
     return `"${value.replace(/"/g, '""')}"`;
@@ -18,6 +24,8 @@ export function exportOrdersToCsv(orders: Order[], filenameBase = "orders"): voi
     "product",
     "quantity",
     "amount",
+    "shipping_cost",
+    "total_amount",
     "notes",
     "status",
     "sub_status",
@@ -39,6 +47,8 @@ export function exportOrdersToCsv(orders: Order[], filenameBase = "orders"): voi
         o.product,
         o.quantity,
         o.amount,
+        o.shipping_cost ?? 0,
+        orderGrandTotal(o),
         o.notes,
         statusLabel(o.status),
         subStatusLabel(o.sub_status ?? null),

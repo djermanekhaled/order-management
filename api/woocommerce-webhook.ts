@@ -1,5 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import { createClient } from "@supabase/supabase-js";
+import { buildOrderRowFromWooCommerce, type WooOrderPayload } from "./wooOrderMapping";
 
 /**
  * Vercel passes a Node-style request with parsed `query` and `body`.
@@ -15,54 +16,27 @@ type WebhookResponse = {
   status: (code: number) => { json: (body: unknown) => void };
 };
 
-type WooOrder = {
-  id?: number;
-  status?: string;
-  total?: string;
-  billing?: {
-    first_name?: string;
-    last_name?: string;
-    phone?: string;
-    address_1?: string;
-    state?: string;
-  };
-  line_items?: Array<{
-    name?: string;
-    quantity?: number;
-  }>;
-};
-
-function parseWooOrderBody(req: WebhookRequest): WooOrder | null {
+function parseWooOrderBody(req: WebhookRequest): WooOrderPayload | null {
   const b = req.body;
   if (b == null || b === "") return null;
   if (typeof b === "string") {
     try {
-      return JSON.parse(b) as WooOrder;
+      return JSON.parse(b) as WooOrderPayload;
     } catch {
       return null;
     }
   }
   if (Buffer.isBuffer(b)) {
     try {
-      return JSON.parse(b.toString("utf8")) as WooOrder;
+      return JSON.parse(b.toString("utf8")) as WooOrderPayload;
     } catch {
       return null;
     }
   }
   if (typeof b === "object") {
-    return b as WooOrder;
+    return b as WooOrderPayload;
   }
   return null;
-}
-
-function mapWooStatus(status: string | undefined): "new" | "under_process" | "completed" | "cancelled" {
-  if (!status) return "new";
-  const s = status.toLowerCase();
-  if (s === "pending") return "new";
-  if (s === "processing" || s === "on-hold") return "under_process";
-  if (s === "completed") return "completed";
-  if (s === "cancelled" || s === "failed" || s === "refunded") return "cancelled";
-  return "new";
 }
 
 export default async function handler(req: WebhookRequest, res: WebhookResponse) {
@@ -115,29 +89,9 @@ export default async function handler(req: WebhookRequest, res: WebhookResponse)
     return;
   }
 
-  const first = payload.billing?.first_name?.trim() ?? "";
-  const last = payload.billing?.last_name?.trim() ?? "";
-  const customerName = [first, last].filter(Boolean).join(" ").trim() || "WooCommerce Customer";
+  const row = buildOrderRowFromWooCommerce(payload, channel.name);
 
-  const item0 = payload.line_items?.[0];
-  const product = item0?.name?.trim() || "WooCommerce item";
-  const quantity = Number.isFinite(item0?.quantity) && (item0?.quantity ?? 0) > 0 ? (item0?.quantity as number) : 1;
-  const amount = Number(payload.total ?? 0);
-
-  const { error: insErr } = await supabaseAdmin.from("orders").insert({
-    customer_name: customerName,
-    phone: payload.billing?.phone?.trim() ?? "",
-    address: payload.billing?.address_1?.trim() ?? "",
-    wilaya: payload.billing?.state?.trim() ?? "",
-    product,
-    quantity,
-    amount: Number.isFinite(amount) ? amount : 0,
-    notes: payload.id ? `WooCommerce order #${payload.id}` : "WooCommerce order",
-    status: mapWooStatus(payload.status),
-    sub_status: null,
-    delivery_company: "",
-    source: channel.name,
-  });
+  const { error: insErr } = await supabaseAdmin.from("orders").insert(row);
 
   if (insErr) {
     res.status(500).json({ error: insErr.message });

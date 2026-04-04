@@ -33,6 +33,12 @@ function formatMoneyDzd(n: number) {
   }).format(n);
 }
 
+function orderGrandTotal(o: Order): number {
+  const t = o.total_amount;
+  if (t != null && Number.isFinite(Number(t))) return Number(t);
+  return Number(o.amount) + Number(o.shipping_cost ?? 0);
+}
+
 function formatDate(iso: string) {
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "short",
@@ -166,6 +172,11 @@ export function OrdersDashboard() {
       throw new Error("Invalid status / sub-status transition.");
     }
 
+    const preservedShip =
+      formMode === "edit" && editingOrder
+        ? Number(editingOrder.shipping_cost ?? 0)
+        : 0;
+
     const payload = {
       customer_name: values.customer_name.trim(),
       phone: values.phone.trim(),
@@ -174,6 +185,8 @@ export function OrdersDashboard() {
       product: values.product.trim(),
       quantity: values.quantity,
       amount: values.amount,
+      shipping_cost: preservedShip,
+      total_amount: values.amount + preservedShip,
       notes: values.notes.trim(),
       status: values.status,
       sub_status: values.sub_status,
@@ -543,7 +556,7 @@ export function OrdersDashboard() {
             </div>
           )}
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1040px] text-left text-sm">
+            <table className="w-full min-w-[1180px] text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-800/80 text-xs uppercase tracking-wider text-slate-500">
                   <th className="px-4 py-3 font-medium">Customer</th>
@@ -551,7 +564,9 @@ export function OrdersDashboard() {
                   <th className="px-4 py-3 font-medium">Wilaya</th>
                   <th className="px-4 py-3 font-medium">Product</th>
                   <th className="px-4 py-3 font-medium">Qty</th>
-                  <th className="px-4 py-3 font-medium">Amount</th>
+                  <th className="px-4 py-3 font-medium">Items</th>
+                  <th className="px-4 py-3 font-medium">Shipping</th>
+                  <th className="px-4 py-3 font-medium">Total</th>
                   <th className="px-4 py-3 font-medium">Delivery</th>
                   <th className="px-4 py-3 font-medium">Source</th>
                   <th className="px-4 py-3 font-medium">Status</th>
@@ -584,6 +599,12 @@ export function OrdersDashboard() {
                       </td>
                       <td className="px-4 py-3 tabular-nums text-slate-200">
                         {formatMoneyDzd(Number(o.amount))}
+                      </td>
+                      <td className="px-4 py-3 tabular-nums text-slate-300">
+                        {formatMoneyDzd(Number(o.shipping_cost ?? 0))}
+                      </td>
+                      <td className="px-4 py-3 tabular-nums font-medium text-slate-100">
+                        {formatMoneyDzd(orderGrandTotal(o))}
                       </td>
                       <td
                         className="max-w-[120px] truncate px-4 py-3 text-slate-400"

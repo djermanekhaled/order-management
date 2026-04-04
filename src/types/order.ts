@@ -33,7 +33,11 @@ export interface Order {
   address: string;
   product: string;
   quantity: number;
+  /** Product / line-items subtotal (excludes shipping). */
   amount: number;
+  shipping_cost?: number;
+  /** Final total including shipping (WooCommerce `total`). */
+  total_amount?: number;
   notes: string;
   status: OrderStatus;
   /** Nullable: required only for certain `status` values. */
