@@ -41,12 +41,12 @@ export function DeliveryCompaniesPage({
 
   async function insertCompany(row: {
     name: string;
-    token: string;
+    secret_key: string;
     tenant_id: string;
   }) {
     const { error: insErr } = await supabase.from("delivery_companies").insert({
       name: row.name,
-      token: row.token,
+      secret_key: row.secret_key,
       tenant_id: row.tenant_id,
       type: "zr_express",
       active: true,
@@ -95,7 +95,7 @@ export function DeliveryCompaniesPage({
           </p>
           <h2 className="mt-1 text-2xl font-semibold text-white">Delivery companies</h2>
           <p className="mt-1 text-sm text-slate-500">
-            ZR Express credentials (tenant + token). Assign companies on the Confirmed orders tab.
+            ZR Express credentials (tenant + secret key). Assign companies on the Confirmed orders tab.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

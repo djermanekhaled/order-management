@@ -5,7 +5,7 @@ const inputClass =
 
 const empty = {
   name: "",
-  token: "",
+  secret_key: "",
   tenant_id: "",
 };
 
@@ -31,15 +31,19 @@ export function DeliveryCompanyModal({
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setLocalError(null);
-    if (!values.name.trim() || !values.token.trim() || !values.tenant_id.trim()) {
-      setLocalError("Name, token, and tenant ID are required.");
+    if (
+      !values.name.trim() ||
+      !values.secret_key.trim() ||
+      !values.tenant_id.trim()
+    ) {
+      setLocalError("Name, secret key, and tenant ID are required.");
       return;
     }
     setSaving(true);
     try {
       await insert({
         name: values.name.trim(),
-        token: values.token.trim(),
+        secret_key: values.secret_key.trim(),
         tenant_id: values.tenant_id.trim(),
       });
       setValues(empty);
@@ -98,13 +102,17 @@ export function DeliveryCompanyModal({
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-300">Token</label>
+            <label className="block text-sm font-medium text-slate-300">
+              Secret Key
+            </label>
             <input
               required
               type="password"
               autoComplete="new-password"
-              value={values.token}
-              onChange={(e) => setValues((v) => ({ ...v, token: e.target.value }))}
+              value={values.secret_key}
+              onChange={(e) =>
+                setValues((v) => ({ ...v, secret_key: e.target.value }))
+              }
               className={inputClass}
             />
           </div>

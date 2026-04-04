@@ -269,7 +269,7 @@ create table if not exists public.delivery_companies (
   name text not null,
   type text not null default 'zr_express'
     check (type = 'zr_express'),
-  token text not null,
+  secret_key text not null,
   tenant_id text not null,
   active boolean not null default true,
   created_at timestamptz not null default now()

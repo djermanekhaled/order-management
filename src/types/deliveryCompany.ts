@@ -4,7 +4,7 @@ export interface DeliveryCompany {
   id: string;
   name: string;
   type: DeliveryCompanyType;
-  token: string;
+  secret_key: string;
   tenant_id: string;
   active: boolean;
   created_at: string;

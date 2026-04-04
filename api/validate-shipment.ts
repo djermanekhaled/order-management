@@ -162,7 +162,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
   const { data: company, error: cErr } = await db
     .from("delivery_companies")
-    .select("id, name, type, token, tenant_id, active")
+    .select("id, name, type, secret_key, tenant_id, active")
     .eq("id", deliveryCompanyId)
     .single();
 
@@ -222,7 +222,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         "Content-Type": "application/json",
         Accept: "application/json",
         "X-Tenant": company.tenant_id,
-        Authorization: `Bearer ${company.token}`,
+        // ZR Express: secretKey is sent as Bearer (not a separate token type).
+        Authorization: `Bearer ${company.secret_key}`,
       },
       body: JSON.stringify({ parcels }),
     });
