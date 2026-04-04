@@ -419,6 +419,7 @@ export function OrdersDashboard() {
         zrErrorDetails?: string[];
         territoryFailures?: unknown;
         zrWilayaNamesSample?: string[];
+        zrHubCityNamesSample?: string[];
       };
       if (!res.ok) {
         const detail =
@@ -433,13 +434,16 @@ export function OrdersDashboard() {
         if (Array.isArray(data.zrErrorDetails) && data.zrErrorDetails.length) {
           zrParts.push(data.zrErrorDetails.join("; "));
         }
-        if (
-          Array.isArray(data.zrWilayaNamesSample) &&
-          data.zrWilayaNamesSample.length
-        ) {
-          zrParts.push(
-            `ZR wilaya names (sample): ${data.zrWilayaNamesSample.join(", ")}`
-          );
+        const hubCities =
+          Array.isArray(data.zrHubCityNamesSample) &&
+          data.zrHubCityNamesSample.length
+            ? data.zrHubCityNamesSample
+            : Array.isArray(data.zrWilayaNamesSample) &&
+                data.zrWilayaNamesSample.length
+              ? data.zrWilayaNamesSample
+              : null;
+        if (hubCities) {
+          zrParts.push(`ZR hub cities (sample): ${hubCities.join(", ")}`);
         }
         if (data.zrBody != null && typeof data.zrBody === "object") {
           zrParts.push(JSON.stringify(data.zrBody));
