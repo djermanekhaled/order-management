@@ -774,6 +774,15 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
   let bulkOutcome: Awaited<ReturnType<typeof zrRequestWithAuthVariants>>;
   try {
+    console.log(
+      `${LOG_PREFIX} ZR Express parcels/bulk — parcel bodies (before fetch), count=${parcels.length}`
+    );
+    parcels.forEach((parcel, i) => {
+      console.log(
+        `${LOG_PREFIX} ZR Express parcels/bulk parcel[${i}]:`,
+        JSON.stringify(parcel)
+      );
+    });
     bulkOutcome = await zrRequestWithAuthVariants(
       zrUrl,
       { method: "POST", body: requestBody },
