@@ -6,6 +6,7 @@ create table if not exists public.orders (
   customer_name text not null,
   phone text not null default '',
   wilaya text not null default '',
+  commune text not null default '',
   address text not null default '',
   product text not null,
   quantity integer not null default 1 check (quantity >= 1),
@@ -25,8 +26,11 @@ create table if not exists public.orders (
   sub_status text,
   source text not null default 'Manual',
   delivery_company text not null default '',
+  delivery_type text not null default 'home'
+    check (delivery_type in ('home', 'pickup-point')),
   shipping_status text,
   tracking_number text not null default '',
+  internal_tracking_id text not null default '',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint orders_sub_status_check check (

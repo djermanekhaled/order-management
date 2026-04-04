@@ -262,6 +262,7 @@ export function OrdersDashboard() {
       customer_name: values.customer_name.trim(),
       phone: values.phone.trim(),
       wilaya: values.wilaya,
+      commune: values.commune.trim(),
       address: values.address.trim(),
       product: values.product.trim(),
       quantity: values.quantity,
@@ -276,6 +277,11 @@ export function OrdersDashboard() {
           ? MANUAL_ORDER_SOURCE
           : editingOrder?.source ?? MANUAL_ORDER_SOURCE,
       delivery_company: values.delivery_company.trim(),
+      delivery_type: values.delivery_type,
+      internal_tracking_id:
+        formMode === "create"
+          ? values.internal_tracking_id
+          : (editingOrder?.internal_tracking_id ?? values.internal_tracking_id),
       tracking_number:
         formMode === "edit" && editingOrder
           ? editingOrder.tracking_number ?? ""

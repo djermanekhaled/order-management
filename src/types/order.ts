@@ -13,6 +13,8 @@ export type OrderStatus =
  * - completed: delivered | returned
  * - cancelled: cancelled | fake_order | duplicated
  */
+export type OrderDeliveryType = "home" | "pickup-point";
+
 export type OrderSubStatus =
   | "call_1"
   | "call_2"
@@ -30,6 +32,7 @@ export interface Order {
   customer_name: string;
   phone: string;
   wilaya: string;
+  commune: string;
   address: string;
   product: string;
   quantity: number;
@@ -45,8 +48,11 @@ export interface Order {
   /** Human-readable origin: "Manual" or a sales channel name. */
   source?: string;
   delivery_company: string;
+  delivery_type: OrderDeliveryType;
   shipping_status?: string | null;
   tracking_number?: string;
+  /** Internal reference (e.g. ORD-2026-XXXX). */
+  internal_tracking_id: string;
   created_at: string;
   updated_at: string;
 }
@@ -55,6 +61,7 @@ export interface OrderFormValues {
   customer_name: string;
   phone: string;
   wilaya: string;
+  commune: string;
   address: string;
   product: string;
   quantity: number;
@@ -63,6 +70,8 @@ export interface OrderFormValues {
   status: OrderStatus;
   sub_status: OrderSubStatus | null;
   delivery_company: string;
+  delivery_type: OrderDeliveryType;
+  internal_tracking_id: string;
 }
 
 export type OrderSnapshot = {

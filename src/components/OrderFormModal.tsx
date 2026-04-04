@@ -11,8 +11,10 @@ import {
   subStatusLabel,
   subStatusesForStatus,
 } from "../lib/orderWorkflow";
+import { generateInternalTrackingId } from "../lib/internalTracking";
 import type {
   Order,
+  OrderDeliveryType,
   OrderFormValues,
   OrderStatus,
   OrderSubStatus,
@@ -23,6 +25,7 @@ const emptyForm: OrderFormValues = {
   customer_name: "",
   phone: "",
   wilaya: "",
+  commune: "",
   address: "",
   product: "",
   quantity: 1,
@@ -31,6 +34,8 @@ const emptyForm: OrderFormValues = {
   status: "new",
   sub_status: null,
   delivery_company: "",
+  delivery_type: "home",
+  internal_tracking_id: "",
 };
 
 type Mode = "create" | "edit";
@@ -62,6 +67,7 @@ export function OrderFormModal({
         customer_name: initialOrder.customer_name,
         phone: initialOrder.phone ?? "",
         wilaya: initialOrder.wilaya ?? "",
+        commune: initialOrder.commune ?? "",
         address: initialOrder.address ?? "",
         product: initialOrder.product,
         quantity: initialOrder.quantity ?? 1,
@@ -73,9 +79,16 @@ export function OrderFormModal({
             ? initialOrder.sub_status ?? "confirmed"
             : initialOrder.sub_status ?? null,
         delivery_company: initialOrder.delivery_company ?? "",
+        delivery_type: initialOrder.delivery_type ?? "home",
+        internal_tracking_id: initialOrder.internal_tracking_id ?? "",
       });
     } else {
-      setValues({ ...emptyForm, status: "new", sub_status: null });
+      setValues({
+        ...emptyForm,
+        status: "new",
+        sub_status: null,
+        internal_tracking_id: generateInternalTrackingId(),
+      });
     }
   }, [open, mode, initialOrder]);
 
@@ -218,6 +231,48 @@ export function OrderFormModal({
                   </option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300">
+                Commune
+              </label>
+              <input
+                value={values.commune}
+                onChange={(e) =>
+                  setValues((v) => ({ ...v, commune: e.target.value }))
+                }
+                placeholder="District / commune"
+                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300">
+                Delivery type
+              </label>
+              <select
+                value={values.delivery_type}
+                onChange={(e) =>
+                  setValues((v) => ({
+                    ...v,
+                    delivery_type: e.target.value as OrderDeliveryType,
+                  }))
+                }
+                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"
+              >
+                <option value="home">À domicile</option>
+                <option value="pickup-point">Stop desk</option>
+              </select>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-slate-300">
+                Internal ref
+              </label>
+              <input
+                readOnly
+                value={values.internal_tracking_id}
+                className="mt-1 w-full cursor-default rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-slate-400 outline-none"
+                title="Generated automatically for this order"
+              />
             </div>
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-slate-300">

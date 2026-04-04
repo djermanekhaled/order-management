@@ -16,12 +16,14 @@ type DbOrder = {
   customer_name: string;
   phone: string;
   wilaya: string;
+  commune: string | null;
   address: string;
   product: string;
   quantity: number;
   amount: number;
   status: string;
   sub_status: string | null;
+  delivery_type: string | null;
 };
 
 const ZR_BASE = "https://api.zrexpress.app";
@@ -99,6 +101,168 @@ function finalizeProductSku(
   return "product";
 }
 
+function normGeoKey(s: string): string {
+  const t = s.trim().toLowerCase().replace(/\s+/g, " ");
+  try {
+    return t.normalize("NFD").replace(/\p{M}/gu, "");
+  } catch {
+    return t;
+  }
+}
+
+/** Wilaya option label is often "16 — Alger"; hub `address.city` is usually the city name. */
+function primaryWilayaName(wilaya: string): string {
+  const t = wilaya.trim();
+  const m = t.match(/[—–-]\s*(.+)$/u);
+  if (m?.[1]) return normGeoKey(m[1].trim());
+  return normGeoKey(t);
+}
+
+function hubAddressCity(hub: Record<string, unknown>): string {
+  const addr = hub.address;
+  if (addr && typeof addr === "object" && !Array.isArray(addr)) {
+    const c = (addr as Record<string, unknown>).city;
+    if (typeof c === "string") return c;
+  }
+  return "";
+}
+
+function hubCityTerritoryId(hub: Record<string, unknown>): string | null {
+  return asTerritoryId(
+    hub.cityTerritoryId ?? hub.city_territory_id ?? hub.cityTerritoryID
+  );
+}
+
+function hubDistrictTerritoryId(hub: Record<string, unknown>): string | null {
+  return asTerritoryId(
+    hub.districtTerritoryId ??
+      hub.district_territory_id ??
+      hub.districtTerritoryID
+  );
+}
+
+function hubCommuneLabels(hub: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  for (const k of ["name", "title", "label", "districtName", "district", "commune"]) {
+    const v = hub[k];
+    if (typeof v === "string" && v.trim()) out.push(v.trim());
+  }
+  const addr = hub.address;
+  if (addr && typeof addr === "object" && !Array.isArray(addr)) {
+    const a = addr as Record<string, unknown>;
+    for (const k of ["district", "commune", "municipality"]) {
+      const v = a[k];
+      if (typeof v === "string" && v.trim()) out.push(v.trim());
+    }
+  }
+  return [...new Set(out)];
+}
+
+function cityMatchesHub(wilaya: string, hubCityRaw: string): boolean {
+  const hubCity = normGeoKey(hubCityRaw);
+  if (!hubCity) return false;
+  const primary = primaryWilayaName(wilaya);
+  const full = normGeoKey(wilaya);
+  const candidates = [primary, full].filter(Boolean);
+  for (const c of candidates) {
+    if (hubCity === c || hubCity.includes(c) || c.includes(hubCity)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function communeMatchesHub(commune: string, hub: Record<string, unknown>): boolean {
+  const c = normGeoKey(commune);
+  if (!c) return false;
+  for (const label of hubCommuneLabels(hub)) {
+    const l = normGeoKey(label);
+    if (!l) continue;
+    if (l === c || l.includes(c) || c.includes(l)) return true;
+  }
+  return false;
+}
+
+/** Hubs from POST /api/v1/hubs/search (shape varies; we unwrap common keys). */
+function extractHubsArray(zrJson: unknown): Record<string, unknown>[] {
+  if (zrJson == null) return [];
+  if (Array.isArray(zrJson)) {
+    return zrJson.filter(
+      (x): x is Record<string, unknown> => x != null && typeof x === "object"
+    );
+  }
+  if (typeof zrJson !== "object") return [];
+  const o = zrJson as Record<string, unknown>;
+  const tryArr = (v: unknown): Record<string, unknown>[] | null => {
+    if (!Array.isArray(v)) return null;
+    return v.filter(
+      (x): x is Record<string, unknown> => x != null && typeof x === "object"
+    );
+  };
+  for (const k of ["hubs", "data", "results", "items"]) {
+    const inner = tryArr(o[k]);
+    if (inner !== null) return inner;
+  }
+  const data = o.data;
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    const d = data as Record<string, unknown>;
+    for (const k of ["hubs", "items", "results"]) {
+      const inner = tryArr(d[k]);
+      if (inner !== null) return inner;
+    }
+  }
+  return [];
+}
+
+function resolveTerritoryFromHubs(
+  hubs: Record<string, unknown>[],
+  wilaya: string,
+  commune: string,
+  fallbacks: { city: string; district: string }
+): {
+  cityTerritoryId: string;
+  districtTerritoryId: string;
+  cityFromHub: boolean;
+  districtFromHub: boolean;
+} {
+  const cityHubs = hubs.filter((h) =>
+    cityMatchesHub(wilaya, hubAddressCity(h))
+  );
+
+  let cityTerritoryId: string | null = null;
+  let cityFromHub = false;
+  for (const h of cityHubs) {
+    const id = hubCityTerritoryId(h);
+    if (id) {
+      cityTerritoryId = id;
+      cityFromHub = true;
+      break;
+    }
+  }
+
+  let districtTerritoryId: string | null = null;
+  let districtFromHub = false;
+  const communeTrim = commune.trim();
+  if (communeTrim && cityHubs.length > 0) {
+    for (const h of cityHubs) {
+      if (!communeMatchesHub(communeTrim, h)) continue;
+      const did = hubDistrictTerritoryId(h);
+      if (did) {
+        districtTerritoryId = did;
+        districtFromHub = true;
+        break;
+      }
+    }
+  }
+
+  return {
+    cityTerritoryId: cityTerritoryId ?? fallbacks.city,
+    districtTerritoryId: districtTerritoryId ?? fallbacks.district,
+    cityFromHub,
+    districtFromHub,
+  };
+}
+
 /** Products array from POST /api/v1/products/search or similar. */
 function extractProductsArray(zrJson: unknown): Record<string, unknown>[] {
   if (zrJson == null) return [];
@@ -168,6 +332,13 @@ function pickZrProductIdSku(
   return { id, sku };
 }
 
+function zrParcelDeliveryType(
+  raw: string | null | undefined
+): "home" | "pickup-point" {
+  const t = (raw ?? "home").trim().toLowerCase().replace(/_/g, "-");
+  return t === "pickup-point" ? "pickup-point" : "home";
+}
+
 function buildZrParcel(
   order: DbOrder,
   territory: { cityTerritoryId: string; districtTerritoryId: string },
@@ -198,7 +369,7 @@ function buildZrParcel(
       },
     ],
     amount: Number(order.amount),
-    deliveryType: "home",
+    deliveryType: zrParcelDeliveryType(order.delivery_type),
   };
 }
 
@@ -671,7 +842,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   const { data: orders, error: oErr } = await db
     .from("orders")
     .select(
-      "id, customer_name, phone, wilaya, address, product, quantity, amount, status, sub_status"
+      "id, customer_name, phone, wilaya, commune, address, product, quantity, amount, status, sub_status, delivery_type"
     )
     .in("id", orderIds);
 
@@ -707,21 +878,86 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     first10LogPreview(xTenantId)
   );
 
-  const fixedTerritory = {
-    cityTerritoryId: ZR_FIXED_CITY_TERRITORY_ID,
-    districtTerritoryId: ZR_FIXED_DISTRICT_TERRITORY_ID,
+  const fallbacks = {
+    city: ZR_FIXED_CITY_TERRITORY_ID,
+    district: ZR_FIXED_DISTRICT_TERRITORY_ID,
   };
-  console.log(
-    `${LOG_PREFIX} Territory lookup disabled — using fixed cityTerritoryId / districtTerritoryId for all parcels:`,
-    fixedTerritory
-  );
+
+  const hubsSearchUrl = `${ZR_BASE}/api/v1/hubs/search`;
+  const hubsSearchBody = JSON.stringify({ pageNumber: 1, pageSize: 500 });
+  let hubList: Record<string, unknown>[] = [];
+  let hubsFetchOk = false;
+  try {
+    const hubsOut = await zrRequestWithAuthVariants(
+      hubsSearchUrl,
+      { method: "POST", body: hubsSearchBody },
+      xTenantId,
+      company.secret_key
+    );
+    if (hubsOut.res.ok) {
+      hubList = extractHubsArray(hubsOut.json);
+      hubsFetchOk = true;
+      console.log(
+        `${LOG_PREFIX} hubs/search OK → ${hubList.length} hub record(s) (unwrapped)`
+      );
+    } else {
+      console.error(`${LOG_PREFIX} hubs/search failed`, {
+        status: hubsOut.res.status,
+        message: zrExpressErrorMessage(
+          hubsOut.res.status,
+          hubsOut.json,
+          hubsOut.text
+        ),
+      });
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`${LOG_PREFIX} hubs/search request error`, msg);
+  }
 
   const territoryByOrder = new Map<
     string,
     { cityTerritoryId: string; districtTerritoryId: string }
   >();
+  const territoryResolution: {
+    orderId: string;
+    cityFromHub: boolean;
+    districtFromHub: boolean;
+  }[] = [];
+
   for (const order of list) {
-    territoryByOrder.set(order.id, { ...fixedTerritory });
+    const wilaya = order.wilaya ?? "";
+    const commune = order.commune ?? "";
+    if (hubsFetchOk && hubList.length > 0) {
+      const r = resolveTerritoryFromHubs(hubList, wilaya, commune, fallbacks);
+      territoryByOrder.set(order.id, {
+        cityTerritoryId: r.cityTerritoryId,
+        districtTerritoryId: r.districtTerritoryId,
+      });
+      territoryResolution.push({
+        orderId: order.id,
+        cityFromHub: r.cityFromHub,
+        districtFromHub: r.districtFromHub,
+      });
+      console.log(`${LOG_PREFIX} Territory for order ${order.id}`, {
+        wilaya,
+        commune: commune || "(empty)",
+        cityTerritoryId: r.cityTerritoryId,
+        districtTerritoryId: r.districtTerritoryId,
+        cityFromHub: r.cityFromHub,
+        districtFromHub: r.districtFromHub,
+      });
+    } else {
+      territoryByOrder.set(order.id, {
+        cityTerritoryId: fallbacks.city,
+        districtTerritoryId: fallbacks.district,
+      });
+      territoryResolution.push({
+        orderId: order.id,
+        cityFromHub: false,
+        districtFromHub: false,
+      });
+    }
   }
 
   const zrProductCacheByKeyword = new Map<
@@ -883,9 +1119,22 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       "ZR response had no parcel array; check API payload/response shape in api/validate-shipment.ts"
     );
   }
-  successWarnings.push(
-    "Territory IDs are fixed test values (wilaya / hub mapping disabled)."
-  );
+  const cityFromHubCount = territoryResolution.filter((t) => t.cityFromHub)
+    .length;
+  const districtFromHubCount = territoryResolution.filter(
+    (t) => t.districtFromHub
+  ).length;
+  if (!hubsFetchOk || hubList.length === 0) {
+    successWarnings.push(
+      hubsFetchOk
+        ? "ZR hubs/search returned no hubs; using fallback cityTerritoryId / districtTerritoryId."
+        : "ZR hubs/search failed; using fallback cityTerritoryId / districtTerritoryId."
+    );
+  } else {
+    successWarnings.push(
+      `Territories: ${cityFromHubCount}/${list.length} city matched hub.address.city (wilaya), ${districtFromHubCount}/${list.length} district matched commune; unmatched use fallbacks.`
+    );
+  }
 
   res.status(200).json({
     ok: true,
@@ -893,8 +1142,16 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     zrResultCount: results.length,
     zrAuthorizationVariant: zrAuthVariantDescription(zrAuthVariantUsed),
     zrXTenantId: xTenantId,
-    zrTerritoryListSource: "fixed_test_ids",
-    zrFixedTerritory: fixedTerritory,
+    zrTerritoryListSource:
+      hubsFetchOk && hubList.length > 0 ? "hubs_search" : "fallback_only",
+    zrHubCount: hubList.length,
+    zrHubsSearchOk: hubsFetchOk,
+    zrTerritoryFallbacks: fallbacks,
+    zrTerritoryResolutionSummary: {
+      cityFromHubCount,
+      districtFromHubCount,
+      orderCount: list.length,
+    },
     warnings: successWarnings.length ? successWarnings : undefined,
     errors: errors.length ? errors : undefined,
   });

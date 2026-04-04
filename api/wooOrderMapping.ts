@@ -1,3 +1,5 @@
+import { randomInt } from "node:crypto";
+
 /** WooCommerce REST / webhook order payload (subset used for DB insert). */
 export type WooOrderPayload = {
   id?: number;
@@ -9,6 +11,7 @@ export type WooOrderPayload = {
     first_name?: string;
     last_name?: string;
     phone?: string;
+    city?: string;
     address_1?: string;
     address_2?: string;
     state?: string;
@@ -44,6 +47,18 @@ function billingAddress(b: WooOrderPayload["billing"]): string {
   if (!b) return "";
   const parts = [b.address_1?.trim(), b.address_2?.trim()].filter(Boolean);
   return parts.join(", ");
+}
+
+const INTERNAL_TRACK_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+function newInternalTrackingId(): string {
+  const y = new Date().getFullYear();
+  let suffix = "";
+  for (let i = 0; i < 4; i++) {
+    suffix +=
+      INTERNAL_TRACK_ALPHABET[randomInt(INTERNAL_TRACK_ALPHABET.length)]!;
+  }
+  return `ORD-${y}-${suffix}`;
 }
 
 export function mapWooStatus(
@@ -83,6 +98,7 @@ export function buildOrderRowFromWooCommerce(wc: WooOrderPayload, sourceName: st
     phone: wc.billing?.phone?.trim() ?? "",
     address: billingAddress(wc.billing),
     wilaya: (wc.billing?.state ?? "").trim(),
+    commune: (wc.billing?.city ?? "").trim(),
     product,
     quantity,
     amount: productAmount,
@@ -92,6 +108,8 @@ export function buildOrderRowFromWooCommerce(wc: WooOrderPayload, sourceName: st
     status: mapWooStatus(wc.status),
     sub_status: null as null,
     delivery_company: "",
+    delivery_type: "home" as const,
+    internal_tracking_id: newInternalTrackingId(),
     source: sourceName,
   };
 }
