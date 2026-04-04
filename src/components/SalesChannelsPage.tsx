@@ -19,9 +19,8 @@ export function SalesChannelsPage({
   const [channels, setChannels] = useState<SalesChannel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [copyStateById, setCopyStateById] = useState<Record<string, "idle" | "copied" | "error">>(
-    {}
-  );
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [syncStatusById, setSyncStatusById] = useState<Record<string, string>>({});
 
   const origin = useMemo(() => {
     if (typeof window === "undefined") return null;
@@ -78,22 +77,63 @@ export function SalesChannelsPage({
     await loadChannels();
   }
 
-  async function copyWebhookUrl(channelId: string) {
-    const url = origin
-      ? `${origin}/api/woocommerce-webhook?channel_id=${channelId}`
-      : `https://[vercel-domain]/api/woocommerce-webhook?channel_id=${channelId}`;
-
+  async function syncChannel(channelId: string) {
+    if (!origin) {
+      setError("Cannot resolve app URL for sync (open this app in the browser).");
+      return;
+    }
+    setError(null);
+    setSyncingId(channelId);
     try {
-      await navigator.clipboard.writeText(url);
-      setCopyStateById((m) => ({ ...m, [channelId]: "copied" }));
-      window.setTimeout(() => {
-        setCopyStateById((m) => ({ ...m, [channelId]: "idle" }));
-      }, 1200);
-    } catch {
-      setCopyStateById((m) => ({ ...m, [channelId]: "error" }));
-      window.setTimeout(() => {
-        setCopyStateById((m) => ({ ...m, [channelId]: "idle" }));
-      }, 1500);
+      const res = await fetch(`${origin}/api/sync-woocommerce`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channel_id: channelId }),
+      });
+      const raw = await res.text();
+      let data: {
+        ok?: boolean;
+        imported?: number;
+        skipped?: number;
+        failed?: number;
+        fetched?: number;
+        errors?: string[];
+        error?: string;
+        details?: string;
+      };
+      try {
+        data = JSON.parse(raw) as typeof data;
+      } catch {
+        data = { error: raw.trim() || res.statusText || "Invalid response" };
+      }
+
+      if (!res.ok) {
+        const msg =
+          data.error ??
+          data.details ??
+          (typeof res.statusText === "string" ? res.statusText : "Sync failed");
+        setSyncStatusById((m) => ({ ...m, [channelId]: `Error: ${msg}` }));
+        return;
+      }
+
+      const parts = [
+        `Imported ${data.imported ?? 0}`,
+        `skipped ${data.skipped ?? 0}`,
+        data.failed ? `failed ${data.failed}` : null,
+        data.fetched != null ? `${data.fetched} from store` : null,
+      ].filter(Boolean);
+      let line = parts.join(" · ");
+      if (data.errors?.length) {
+        line += ` (${data.errors[0]})`;
+      }
+      setSyncStatusById((m) => ({ ...m, [channelId]: line }));
+    } catch (e) {
+      setSyncStatusById((m) => ({
+        ...m,
+        [channelId]: `Error: ${e instanceof Error ? e.message : "Request failed"}`,
+      }));
+    } finally {
+      setSyncingId(null);
     }
   }
 
@@ -106,8 +146,10 @@ export function SalesChannelsPage({
           </p>
           <h2 className="mt-1 text-2xl font-semibold text-white">Sales channels</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Connect WooCommerce stores. Orders synced from a channel use the
-            channel name as <span className="text-slate-400">source</span>.
+            Connect WooCommerce stores with the REST API keys. Use{" "}
+            <span className="text-slate-400">Sync</span> to import pending orders;
+            imported orders use the channel name as{" "}
+            <span className="text-slate-400">source</span>.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -147,12 +189,12 @@ export function SalesChannelsPage({
           </p>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] text-left text-sm">
+          <table className="w-full min-w-[860px] text-left text-sm">
             <thead>
               <tr className="border-b border-slate-800/80 text-xs uppercase tracking-wider text-slate-500">
                 <th className="px-5 py-3 font-medium">Name</th>
                 <th className="px-5 py-3 font-medium">Store URL</th>
-                <th className="px-5 py-3 font-medium">Webhook URL</th>
+                <th className="px-5 py-3 font-medium">Sync</th>
                 <th className="px-5 py-3 font-medium">Status</th>
                 <th className="px-5 py-3 font-medium text-right">Actions</th>
               </tr>
@@ -174,24 +216,26 @@ export function SalesChannelsPage({
                         {ch.store_url}
                       </a>
                     </td>
-                    <td className="px-5 py-3 text-slate-400">
-                      <div className="flex items-center gap-2">
-                        <code className="max-w-[360px] truncate rounded-lg bg-slate-950 px-2 py-1 text-xs text-slate-200 ring-1 ring-slate-700/70">
-                          {origin
-                            ? `${origin}/api/woocommerce-webhook?channel_id=${ch.id}`
-                            : `https://[vercel-domain]/api/woocommerce-webhook?channel_id=${ch.id}`}
-                        </code>
+                    <td className="max-w-[280px] px-5 py-3 text-slate-400">
+                      <div className="flex flex-col gap-1">
                         <button
                           type="button"
-                          onClick={() => void copyWebhookUrl(ch.id)}
-                          className="rounded-lg border border-slate-600 px-2 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
+                          disabled={syncingId === ch.id || ch.status !== "active"}
+                          onClick={() => void syncChannel(ch.id)}
+                          className="w-fit rounded-lg border border-indigo-600/50 bg-indigo-950/40 px-2 py-1 text-xs font-medium text-indigo-200 hover:bg-indigo-900/40 disabled:cursor-not-allowed disabled:opacity-40"
+                          title={
+                            ch.status !== "active"
+                              ? "Activate the channel to sync"
+                              : "Import pending orders from WooCommerce"
+                          }
                         >
-                          {copyStateById[ch.id] === "copied"
-                            ? "Copied"
-                            : copyStateById[ch.id] === "error"
-                              ? "Copy failed"
-                              : "Copy"}
+                          {syncingId === ch.id ? "Syncing…" : "Sync"}
                         </button>
+                        {syncStatusById[ch.id] ? (
+                          <p className="text-xs leading-snug text-slate-500">
+                            {syncStatusById[ch.id]}
+                          </p>
+                        ) : null}
                       </div>
                     </td>
                     <td className="px-5 py-3">
