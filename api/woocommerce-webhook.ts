@@ -1,22 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import crypto from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
-
-function readRawBody(req: VercelRequest): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    req.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
-    req.on("end", () => resolve(Buffer.concat(chunks)));
-    req.on("error", reject);
-  });
-}
-
-function safeEq(a: string, b: string): boolean {
-  const ab = Buffer.from(a);
-  const bb = Buffer.from(b);
-  if (ab.length !== bb.length) return false;
-  return crypto.timingSafeEqual(ab, bb);
-}
 
 type WooOrder = {
   id?: number;
@@ -34,6 +17,29 @@ type WooOrder = {
     quantity?: number;
   }>;
 };
+
+function parseWooOrderBody(req: VercelRequest): WooOrder | null {
+  const b = req.body;
+  if (b == null || b === "") return null;
+  if (typeof b === "string") {
+    try {
+      return JSON.parse(b) as WooOrder;
+    } catch {
+      return null;
+    }
+  }
+  if (Buffer.isBuffer(b)) {
+    try {
+      return JSON.parse(b.toString("utf8")) as WooOrder;
+    } catch {
+      return null;
+    }
+  }
+  if (typeof b === "object") {
+    return b as WooOrder;
+  }
+  return null;
+}
 
 function mapWooStatus(status: string | undefined): "new" | "under_process" | "completed" | "cancelled" {
   if (!status) return "new";
@@ -70,7 +76,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { data: channel, error: chErr } = await supabaseAdmin
     .from("sales_channels")
-    .select("id, name, consumer_secret")
+    .select("id, name")
     .eq("id", channelId)
     .single();
 
@@ -79,31 +85,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const signatureHeader =
-    (req.headers["x-wc-webhook-signature"] as string | undefined) ??
-    (req.headers["X-WC-Webhook-Signature"] as string | undefined);
-
-  if (!signatureHeader) {
-    res.status(401).json({ error: "Missing signature" });
-    return;
-  }
-
-  const rawBody = await readRawBody(req);
-  const expected = crypto
-    .createHmac("sha256", channel.consumer_secret)
-    .update(rawBody)
-    .digest("base64");
-
-  if (!safeEq(signatureHeader, expected)) {
-    res.status(401).json({ error: "Invalid signature" });
-    return;
-  }
-
-  let payload: WooOrder;
-  try {
-    payload = JSON.parse(rawBody.toString("utf8")) as WooOrder;
-  } catch {
-    res.status(400).json({ error: "Invalid JSON" });
+  const payload = parseWooOrderBody(req);
+  if (!payload) {
+    res.status(400).json({ error: "Invalid or missing JSON body" });
     return;
   }
 
@@ -138,4 +122,3 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   res.status(200).json({ ok: true });
 }
-
