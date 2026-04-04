@@ -1,4 +1,5 @@
 import type { IncomingMessage } from "node:http";
+import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 
 type ApiRequest = IncomingMessage & {
@@ -14,6 +15,7 @@ type DbOrder = {
   id: string;
   customer_name: string;
   phone: string;
+  wilaya: string;
   address: string;
   product: string;
   quantity: number;
@@ -45,12 +47,198 @@ function parseJsonBody(req: ApiRequest): unknown | null {
   return null;
 }
 
-function mapOrderToZrParcel(order: DbOrder) {
+function formatDzPhoneNumber1(raw: string): string {
+  const s0 = raw.replace(/[\s\-.]/g, "").trim();
+  if (!s0) return "+213";
+  let s = s0;
+  if (s.startsWith("+213")) {
+    const rest = s.slice(4).replace(/^0+/, "");
+    return `+213${rest}`;
+  }
+  if (s.startsWith("213")) {
+    const rest = s.slice(3).replace(/^0+/, "");
+    return `+213${rest}`;
+  }
+  if (s.startsWith("0")) s = s.slice(1);
+  return `+213${s.replace(/^\+/, "")}`;
+}
+
+function normalizeTerritoryLevel(level: string): string {
+  return level.trim().toLowerCase();
+}
+
+function asTerritoryId(v: unknown): string | null {
+  if (typeof v === "string" && v.trim()) return v.trim();
+  if (typeof v === "number" && Number.isFinite(v)) return String(v);
+  return null;
+}
+
+function territoryNodeMeta(
+  o: Record<string, unknown>
+): { id: string; name: string; levelNorm: string } | null {
+  const id = asTerritoryId(
+    o.id ?? o.territoryId ?? o.cityTerritoryId ?? o.districtTerritoryId
+  );
+  const nameRaw =
+    typeof o.name === "string"
+      ? o.name
+      : typeof o.territoryName === "string"
+        ? o.territoryName
+        : typeof o.label === "string"
+          ? o.label
+          : "";
+  const name = nameRaw.trim();
+  const levelRaw =
+    typeof o.level === "string"
+      ? o.level
+      : typeof o.type === "string"
+        ? o.type
+        : "";
+  if (!id || !name) return null;
+  return { id, name, levelNorm: normalizeTerritoryLevel(levelRaw) };
+}
+
+function getTerritoryChildArray(o: Record<string, unknown>): unknown[] {
+  for (const key of [
+    "children",
+    "territories",
+    "communes",
+    "districts",
+    "subTerritories",
+    "nodes",
+  ]) {
+    const v = o[key];
+    if (Array.isArray(v)) return v;
+  }
+  return [];
+}
+
+function wilayaNamesMatch(orderWilaya: string, territoryName: string): boolean {
+  const o = orderWilaya.trim().toLowerCase();
+  const t = territoryName.trim().toLowerCase();
+  if (!o || !t) return false;
+  if (o === t) return true;
+  const parts = o
+    .split(/[—\-–]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const namePart = parts[parts.length - 1] ?? o;
+  const codePart = parts[0] ?? "";
+  if (namePart === t) return true;
+  if (o.includes(t) || t.includes(namePart)) return true;
+  if (codePart && (t.includes(codePart) || codePart === t)) return true;
+  return false;
+}
+
+function collectCommuneIdsUnder(nodes: unknown[]): string[] {
+  const out: string[] = [];
+  for (const node of nodes) {
+    if (!node || typeof node !== "object") continue;
+    const o = node as Record<string, unknown>;
+    const meta = territoryNodeMeta(o);
+    if (meta && meta.levelNorm === "commune") {
+      out.push(meta.id);
+    }
+    out.push(...collectCommuneIdsUnder(getTerritoryChildArray(o)));
+  }
+  return out;
+}
+
+function findWilayaAndDistrictIds(
+  roots: unknown[],
+  orderWilaya: string
+): { cityTerritoryId: string; districtTerritoryId: string } | null {
+  function search(
+    nodes: unknown[]
+  ): { cityTerritoryId: string; districtTerritoryId: string } | null {
+    for (const node of nodes) {
+      if (!node || typeof node !== "object") continue;
+      const o = node as Record<string, unknown>;
+      const meta = territoryNodeMeta(o);
+      const children = getTerritoryChildArray(o);
+      if (meta && meta.levelNorm === "wilaya") {
+        if (wilayaNamesMatch(orderWilaya, meta.name)) {
+          const communeIds = collectCommuneIdsUnder(children);
+          if (communeIds.length === 0) return null;
+          return {
+            cityTerritoryId: meta.id,
+            districtTerritoryId: communeIds[0],
+          };
+        }
+      }
+      const nested = search(children);
+      if (nested) return nested;
+    }
+    return null;
+  }
+  return search(roots);
+}
+
+function extractTerritoryRootsFromSupplier(zrJson: unknown): unknown[] {
+  if (zrJson == null) return [];
+  if (Array.isArray(zrJson)) return zrJson;
+  if (typeof zrJson !== "object") return [];
+  const o = zrJson as Record<string, unknown>;
+  const pick = (v: unknown): unknown[] | null =>
+    Array.isArray(v) ? v : null;
+
+  let arr = pick(o.territories);
+  if (arr) return arr;
+
+  const data = o.data;
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === "object") {
+    const d = data as Record<string, unknown>;
+    arr =
+      pick(d.territories) ?? pick(d.children) ?? pick(d.items);
+    if (arr) return arr;
+  }
+
+  for (const k of ["supplier", "result"]) {
+    const x = o[k];
+    if (x && typeof x === "object") {
+      const xo = x as Record<string, unknown>;
+      arr = pick(xo.territories) ?? pick(xo.children);
+      if (arr) return arr;
+    }
+  }
+
+  return [];
+}
+
+function collectWilayaNamesHint(roots: unknown[], limit: number): string[] {
+  const names: string[] = [];
+  function walk(nodes: unknown[]) {
+    for (const n of nodes) {
+      if (!n || typeof n !== "object") continue;
+      const o = n as Record<string, unknown>;
+      const meta = territoryNodeMeta(o);
+      if (meta && meta.levelNorm === "wilaya") {
+        names.push(meta.name);
+        if (names.length >= limit) return;
+      }
+      walk(getTerritoryChildArray(o));
+    }
+  }
+  walk(roots);
+  return names.slice(0, limit);
+}
+
+function buildZrParcel(
+  order: DbOrder,
+  territory: { cityTerritoryId: string; districtTerritoryId: string }
+) {
   return {
+    stockType: "local",
+    externalId: order.id,
+    description: order.product,
     customer: {
+      customerId: randomUUID(),
       name: order.customer_name,
-      phone: { number1: order.phone || "" },
+      phone: { number1: formatDzPhoneNumber1(order.phone || "") },
     },
+    cityTerritoryId: territory.cityTerritoryId,
+    districtTerritoryId: territory.districtTerritoryId,
     deliveryAddress: {
       street: order.address || "",
     },
@@ -62,7 +250,6 @@ function mapOrderToZrParcel(order: DbOrder) {
     ],
     amount: Number(order.amount),
     deliveryType: "home",
-    reference: order.id,
   };
 }
 
@@ -226,6 +413,127 @@ function zrExpressErrorMessage(
   return `ZR Express returned HTTP ${httpStatus}`;
 }
 
+/** Collect nested ZR validation / error strings for UI. */
+function collectZrErrorStrings(zrJson: unknown, depth = 0): string[] {
+  if (depth > 10) return [];
+  if (zrJson == null) return [];
+  if (typeof zrJson === "string") {
+    const t = zrJson.trim();
+    return t ? [t] : [];
+  }
+  if (typeof zrJson !== "object") return [];
+  if (Array.isArray(zrJson)) {
+    return zrJson.flatMap((x) => collectZrErrorStrings(x, depth + 1));
+  }
+  const o = zrJson as Record<string, unknown>;
+  const found: string[] = [];
+  for (const k of ["message", "error", "detail", "title", "description", "reason"]) {
+    const v = o[k];
+    if (typeof v === "string" && v.trim()) {
+      found.push(v.trim());
+    } else if (v && typeof v === "object") {
+      found.push(...collectZrErrorStrings(v, depth + 1));
+    }
+  }
+  if (Array.isArray(o.errors)) {
+    for (const e of o.errors) {
+      if (typeof e === "string" && e.trim()) found.push(e.trim());
+      else found.push(...collectZrErrorStrings(e, depth + 1));
+    }
+  }
+  return [...new Set(found.filter(Boolean))];
+}
+
+function buildZrUiErrorPayload(
+  httpStatus: number,
+  zrJson: unknown,
+  zrText: string,
+  authVariant: ZrAuthVariant,
+  zrStep: string
+): Record<string, unknown> {
+  const primary = zrExpressErrorMessage(httpStatus, zrJson, zrText);
+  const details = collectZrErrorStrings(zrJson, 0).filter((s) => s !== primary);
+  const error =
+    details.length > 0 ? `${primary} — ${details.join("; ")}` : primary;
+  return {
+    error,
+    zrStep,
+    zrStatus: httpStatus,
+    zrBody: zrJson !== null ? zrJson : zrText,
+    zrErrorDetails: details.length ? [primary, ...details] : [primary],
+    zrAuthorizationVariant: zrAuthVariantDescription(authVariant),
+  };
+}
+
+async function zrRequestWithAuthVariants(
+  url: string,
+  init: { method?: string; body?: string | undefined },
+  tenantId: string,
+  secretKey: string
+): Promise<{
+  res: Response;
+  text: string;
+  json: unknown;
+  variant: ZrAuthVariant;
+}> {
+  const method = init.method ?? "POST";
+  const body = init.body;
+  const variants: ZrAuthVariant[] = ["x_api_key", "bearer", "raw_secret"];
+  let last!: {
+    res: Response;
+    text: string;
+    json: unknown;
+    variant: ZrAuthVariant;
+  };
+
+  for (let i = 0; i < variants.length; i++) {
+    const variant = variants[i];
+    const headers = buildZrRequestHeaders(variant, tenantId, secretKey);
+    logFullZrOutboundRequest(method, url, headers, body ?? "", variant);
+
+    const res = await fetch(url, { method, headers, body });
+    const text = await res.text();
+    let json: unknown = null;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = null;
+    }
+
+    console.log(
+      `${LOG_PREFIX} ZR Express response status [${variant}]:`,
+      res.status
+    );
+    console.log(`${LOG_PREFIX} ZR Express response body [${variant}]:`, text);
+
+    last = { res, text, json, variant };
+
+    if (res.ok) {
+      console.log(
+        `${LOG_PREFIX} ZR Express accepted auth method:`,
+        zrAuthVariantDescription(variant)
+      );
+      return last;
+    }
+
+    const authRejected = res.status === 401 || res.status === 403;
+    const hasNext = i < variants.length - 1;
+
+    if (authRejected && hasNext) {
+      const next = variants[i + 1];
+      console.log(
+        `${LOG_PREFIX} Auth rejected (HTTP ${res.status}); next attempt:`,
+        zrAuthVariantDescription(next)
+      );
+      continue;
+    }
+
+    return last;
+  }
+
+  return last;
+}
+
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
@@ -286,7 +594,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   const { data: orders, error: oErr } = await db
     .from("orders")
     .select(
-      "id, customer_name, phone, address, product, quantity, amount, status, sub_status"
+      "id, customer_name, phone, wilaya, address, product, quantity, amount, status, sub_status"
     )
     .in("id", orderIds);
 
@@ -315,103 +623,178 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
   }
 
-  const parcels = list.map(mapOrderToZrParcel);
+  const supplierId = company.tenant_id;
+  const supplierUrl = `${ZR_BASE}/api/v1/supplier/${encodeURIComponent(supplierId)}`;
+  const supplierRequestBody = JSON.stringify({
+    supplierId,
+    includeTerritories: true,
+  });
+
+  let supplierOutcome: Awaited<
+    ReturnType<typeof zrRequestWithAuthVariants>
+  >;
+  try {
+    supplierOutcome = await zrRequestWithAuthVariants(
+      supplierUrl,
+      { method: "POST", body: supplierRequestBody },
+      company.tenant_id,
+      company.secret_key
+    );
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`${LOG_PREFIX} ZR supplier fetch failed`, {
+      url: supplierUrl,
+      error: msg,
+    });
+    res.status(502).json({
+      error: `Failed to reach ZR Express supplier API: ${msg}`,
+      zrStep: "supplier_territories",
+      zrUrl: supplierUrl,
+    });
+    return;
+  }
+
+  if (!supplierOutcome.res.ok) {
+    console.error(`${LOG_PREFIX} ZR supplier API error`, {
+      status: supplierOutcome.res.status,
+      body: supplierOutcome.text,
+    });
+    res
+      .status(502)
+      .json(
+        buildZrUiErrorPayload(
+          supplierOutcome.res.status,
+          supplierOutcome.json,
+          supplierOutcome.text,
+          supplierOutcome.variant,
+          "supplier_territories"
+        )
+      );
+    return;
+  }
+
+  const territoryRoots = extractTerritoryRootsFromSupplier(
+    supplierOutcome.json
+  );
+  if (territoryRoots.length === 0) {
+    res.status(502).json({
+      error:
+        "ZR Express supplier response had no territory list after parsing. Check includeTerritories and API response shape.",
+      zrStep: "supplier_territories",
+      zrBody: supplierOutcome.json,
+      zrErrorDetails: [
+        "Could not find a territories array on the supplier response; inspect zrBody or server logs.",
+      ],
+      zrAuthorizationVariant: zrAuthVariantDescription(supplierOutcome.variant),
+    });
+    return;
+  }
+
+  const territoryFailures: {
+    orderId: string;
+    wilaya: string;
+    reason: string;
+  }[] = [];
+  const territoryByOrder = new Map<
+    string,
+    { cityTerritoryId: string; districtTerritoryId: string }
+  >();
+
+  for (const order of list) {
+    const w = (order.wilaya ?? "").trim();
+    if (!w) {
+      territoryFailures.push({
+        orderId: order.id,
+        wilaya: "",
+        reason: "Order has no wilaya; cannot resolve cityTerritoryId",
+      });
+      continue;
+    }
+    const ids = findWilayaAndDistrictIds(territoryRoots, w);
+    if (!ids) {
+      territoryFailures.push({
+        orderId: order.id,
+        wilaya: w,
+        reason:
+          'No matching wilaya (level "wilaya") or no commune under it in ZR territories',
+      });
+      continue;
+    }
+    territoryByOrder.set(order.id, ids);
+  }
+
+  if (territoryFailures.length > 0) {
+    const wilayaHint = collectWilayaNamesHint(territoryRoots, 24);
+    res.status(400).json({
+      error: territoryFailures
+        .map(
+          (f) =>
+            `Order ${f.orderId}: ${f.reason}${
+              f.wilaya ? ` (wilaya: "${f.wilaya}")` : ""
+            }`
+        )
+        .join("\n"),
+      zrStep: "territory_lookup",
+      territoryFailures,
+      zrWilayaNamesSample: wilayaHint.length ? wilayaHint : undefined,
+      zrErrorDetails: territoryFailures.map(
+        (f) =>
+          `${f.orderId}: ${f.reason}${f.wilaya ? ` ["${f.wilaya}"]` : ""}`
+      ),
+    });
+    return;
+  }
+
+  const parcels = list.map((order) =>
+    buildZrParcel(order, territoryByOrder.get(order.id)!)
+  );
   const zrUrl = `${ZR_BASE}/api/v1/parcels/bulk`;
   const requestBody = JSON.stringify({ parcels });
 
-  const variants: ZrAuthVariant[] = ["x_api_key", "bearer", "raw_secret"];
-  let zrRes: Response | undefined;
-  let zrText = "";
-  let zrJson: unknown = null;
-  let zrAuthVariantUsed: ZrAuthVariant = "x_api_key";
-
+  let bulkOutcome: Awaited<ReturnType<typeof zrRequestWithAuthVariants>>;
   try {
-    for (let i = 0; i < variants.length; i++) {
-      const variant = variants[i];
-      const headers = buildZrRequestHeaders(
-        variant,
-        company.tenant_id,
-        company.secret_key
-      );
-
-      logFullZrOutboundRequest("POST", zrUrl, headers, requestBody, variant);
-
-      zrRes = await fetch(zrUrl, {
-        method: "POST",
-        headers,
-        body: requestBody,
-      });
-
-      zrText = await zrRes.text();
-      try {
-        zrJson = zrText ? JSON.parse(zrText) : null;
-      } catch {
-        zrJson = null;
-      }
-
-      console.log(
-        `${LOG_PREFIX} ZR Express response status [${variant}]:`,
-        zrRes.status
-      );
-      console.log(
-        `${LOG_PREFIX} ZR Express response body [${variant}]:`,
-        zrText
-      );
-
-      if (zrRes.ok) {
-        zrAuthVariantUsed = variant;
-        console.log(
-          `${LOG_PREFIX} ZR Express accepted auth method:`,
-          zrAuthVariantDescription(variant)
-        );
-        break;
-      }
-
-      const authRejected =
-        zrRes.status === 401 || zrRes.status === 403;
-      const hasNext = i < variants.length - 1;
-
-      if (authRejected && hasNext) {
-        const next = variants[i + 1];
-        console.log(
-          `${LOG_PREFIX} Auth rejected (HTTP ${zrRes.status}); next attempt:`,
-          zrAuthVariantDescription(next)
-        );
-        continue;
-      }
-
-      zrAuthVariantUsed = variant;
-      break;
-    }
+    bulkOutcome = await zrRequestWithAuthVariants(
+      zrUrl,
+      { method: "POST", body: requestBody },
+      company.tenant_id,
+      company.secret_key
+    );
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.error(`${LOG_PREFIX} ZR Express fetch failed`, { url: zrUrl, error: msg });
+    console.error(`${LOG_PREFIX} ZR parcels bulk fetch failed`, {
+      url: zrUrl,
+      error: msg,
+    });
     res.status(502).json({
-      error: `Failed to reach ZR Express API: ${msg}`,
+      error: `Failed to reach ZR Express parcels API: ${msg}`,
+      zrStep: "parcels_bulk",
       zrUrl,
     });
     return;
   }
 
-  if (!zrRes) {
-    res.status(502).json({ error: "ZR Express request did not complete", zrUrl });
-    return;
-  }
+  const zrRes = bulkOutcome.res;
+  const zrText = bulkOutcome.text;
+  const zrJson = bulkOutcome.json;
+  const zrAuthVariantUsed = bulkOutcome.variant;
 
   if (!zrRes.ok) {
-    const zrMessage = zrExpressErrorMessage(zrRes.status, zrJson, zrText);
-    console.error(`${LOG_PREFIX} ZR Express error`, {
+    console.error(`${LOG_PREFIX} ZR parcels bulk error`, {
       authMethodLastUsed: zrAuthVariantDescription(zrAuthVariantUsed),
       status: zrRes.status,
-      message: zrMessage,
       body: zrText,
     });
-    res.status(502).json({
-      error: zrMessage,
-      zrStatus: zrRes.status,
-      zrBody: zrJson !== null ? zrJson : zrText,
-      zrAuthorizationVariant: zrAuthVariantDescription(zrAuthVariantUsed),
-    });
+    res
+      .status(502)
+      .json(
+        buildZrUiErrorPayload(
+          zrRes.status,
+          zrJson,
+          zrText,
+          zrAuthVariantUsed,
+          "parcels_bulk"
+        )
+      );
     return;
   }
 

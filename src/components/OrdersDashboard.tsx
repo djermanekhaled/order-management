@@ -413,6 +413,12 @@ export function OrdersDashboard() {
         error?: string;
         details?: unknown;
         updated?: number;
+        zrStep?: string;
+        zrStatus?: number;
+        zrBody?: unknown;
+        zrErrorDetails?: string[];
+        territoryFailures?: unknown;
+        zrWilayaNamesSample?: string[];
       };
       if (!res.ok) {
         const detail =
@@ -421,8 +427,33 @@ export function OrdersDashboard() {
             : data.details != null
               ? JSON.stringify(data.details)
               : "";
+        const zrParts: string[] = [];
+        if (data.zrStep) zrParts.push(`step: ${data.zrStep}`);
+        if (data.zrStatus != null) zrParts.push(`ZR HTTP ${data.zrStatus}`);
+        if (Array.isArray(data.zrErrorDetails) && data.zrErrorDetails.length) {
+          zrParts.push(data.zrErrorDetails.join("; "));
+        }
+        if (
+          Array.isArray(data.zrWilayaNamesSample) &&
+          data.zrWilayaNamesSample.length
+        ) {
+          zrParts.push(
+            `ZR wilaya names (sample): ${data.zrWilayaNamesSample.join(", ")}`
+          );
+        }
+        if (data.zrBody != null && typeof data.zrBody === "object") {
+          zrParts.push(JSON.stringify(data.zrBody));
+        } else if (typeof data.zrBody === "string" && data.zrBody.trim()) {
+          zrParts.push(data.zrBody.trim());
+        }
         throw new Error(
-          [data.error ?? `HTTP ${res.status}`, detail].filter(Boolean).join(" — ")
+          [
+            data.error ?? `HTTP ${res.status}`,
+            detail,
+            zrParts.length ? zrParts.join(" — ") : "",
+          ]
+            .filter(Boolean)
+            .join(" — ")
         );
       }
       setSelectedOrderIds(new Set());
