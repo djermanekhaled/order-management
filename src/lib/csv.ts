@@ -31,6 +31,8 @@ export function exportOrdersToCsv(orders: Order[], filenameBase = "orders"): voi
     "sub_status",
     "source",
     "delivery_company",
+    "shipping_status",
+    "tracking_number",
     "created_at",
     "updated_at",
   ];
@@ -54,6 +56,8 @@ export function exportOrdersToCsv(orders: Order[], filenameBase = "orders"): voi
         subStatusLabel(o.sub_status ?? null),
         o.source ?? "Manual",
         o.delivery_company,
+        o.shipping_status ?? "",
+        o.tracking_number ?? "",
         o.created_at,
         o.updated_at,
       ]

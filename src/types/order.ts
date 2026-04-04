@@ -45,6 +45,8 @@ export interface Order {
   /** Human-readable origin: "Manual" or a sales channel name. */
   source?: string;
   delivery_company: string;
+  shipping_status?: string | null;
+  tracking_number?: string;
   created_at: string;
   updated_at: string;
 }

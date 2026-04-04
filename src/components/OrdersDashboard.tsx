@@ -20,7 +20,9 @@ import type {
   OrderSubStatus,
   SidebarNavKey,
 } from "../types/order";
+import type { DeliveryCompany } from "../types/deliveryCompany";
 import { AppSidebar } from "./AppSidebar";
+import { DeliveryCompaniesPage } from "./DeliveryCompaniesPage";
 import { OrderFormModal } from "./OrderFormModal";
 import { OrderHistoryPanel } from "./OrderHistoryPanel";
 import { InventoryPage } from "./InventoryPage";
@@ -62,18 +64,36 @@ function localDayBounds(fromStr: string | "", toStr: string | "") {
   return { fromMs, toMs };
 }
 
+function validateShipmentApiUrl(): string {
+  const o = import.meta.env.VITE_API_ORIGIN;
+  if (typeof o === "string" && o.trim()) {
+    return `${o.replace(/\/$/, "")}/api/validate-shipment`;
+  }
+  return "/api/validate-shipment";
+}
+
 export function OrdersDashboard() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sidebarView, setSidebarView] = useState<
-    "orders" | "sales_channels" | "products" | "inventory"
+    | "orders"
+    | "sales_channels"
+    | "products"
+    | "delivery_companies"
+    | "inventory"
   >("orders");
   const [channelModalOpen, setChannelModalOpen] = useState(false);
   const [productModalOpen, setProductModalOpen] = useState(false);
   const [productFreshKey, setProductFreshKey] = useState(0);
+  const [companyModalOpen, setCompanyModalOpen] = useState(false);
   const [channelCount, setChannelCount] = useState(0);
   const [activeProductCount, setActiveProductCount] = useState(0);
+  const [activeDeliveryCompanyCount, setActiveDeliveryCompanyCount] =
+    useState(0);
+  const [deliveryCompanies, setDeliveryCompanies] = useState<
+    DeliveryCompany[]
+  >([]);
   const [navKey, setNavKey] = useState<SidebarNavKey>("all");
   const [subStatusFilter, setSubStatusFilter] = useState<OrderSubStatus | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -90,6 +110,12 @@ export function OrdersDashboard() {
   const [historyLabel, setHistoryLabel] = useState("");
 
   const [savingStateId, setSavingStateId] = useState<string | null>(null);
+
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(
+    () => new Set()
+  );
+  const [bulkDeliveryCompanyId, setBulkDeliveryCompanyId] = useState("");
+  const [bulkWorking, setBulkWorking] = useState(false);
 
   const loadOrders = useCallback(async () => {
     setError(null);
@@ -113,6 +139,13 @@ export function OrdersDashboard() {
   useEffect(() => {
     // Keep "All" selected when switching between main sidebar items.
     setSubStatusFilter(null);
+  }, [navKey]);
+
+  useEffect(() => {
+    if (navKey !== "confirmed") {
+      setSelectedOrderIds(new Set());
+      setBulkDeliveryCompanyId("");
+    }
   }, [navKey]);
 
   const { fromMs, toMs } = useMemo(
@@ -176,6 +209,33 @@ export function OrdersDashboard() {
     void loadActiveProductCount();
   }, [loadActiveProductCount]);
 
+  const loadActiveDeliveryCompanyCount = useCallback(async () => {
+    const { count } = await supabase
+      .from("delivery_companies")
+      .select("*", { count: "exact", head: true })
+      .eq("active", true);
+    setActiveDeliveryCompanyCount(count ?? 0);
+  }, []);
+
+  const loadDeliveryCompanies = useCallback(async () => {
+    const { data } = await supabase
+      .from("delivery_companies")
+      .select("*")
+      .eq("active", true)
+      .order("name");
+    setDeliveryCompanies((data ?? []) as DeliveryCompany[]);
+  }, []);
+
+  const onDeliveryCompaniesChanged = useCallback(() => {
+    void loadActiveDeliveryCompanyCount();
+    void loadDeliveryCompanies();
+  }, [loadActiveDeliveryCompanyCount, loadDeliveryCompanies]);
+
+  useEffect(() => {
+    void loadActiveDeliveryCompanyCount();
+    void loadDeliveryCompanies();
+  }, [loadActiveDeliveryCompanyCount, loadDeliveryCompanies]);
+
   async function handleSaveOrder(
     values: OrderFormValues,
     previous: OrderSnapshot | null
@@ -216,6 +276,14 @@ export function OrdersDashboard() {
           ? MANUAL_ORDER_SOURCE
           : editingOrder?.source ?? MANUAL_ORDER_SOURCE,
       delivery_company: values.delivery_company.trim(),
+      tracking_number:
+        formMode === "edit" && editingOrder
+          ? editingOrder.tracking_number ?? ""
+          : "",
+      shipping_status:
+        formMode === "edit" && editingOrder
+          ? editingOrder.shipping_status ?? null
+          : null,
     };
 
     if (formMode === "create") {
@@ -284,6 +352,92 @@ export function OrdersDashboard() {
     setWilayaFilter(WILAYA_FILTER_ALL);
   }
 
+  const activeDeliveryCompanies = useMemo(
+    () => deliveryCompanies.filter((c) => c.active),
+    [deliveryCompanies]
+  );
+
+  function toggleOrderSelected(id: string, checked: boolean) {
+    setSelectedOrderIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAllConfirmed(checked: boolean) {
+    if (checked) {
+      setSelectedOrderIds(new Set(filteredOrders.map((o) => o.id)));
+    } else {
+      setSelectedOrderIds(new Set());
+    }
+  }
+
+  async function assignShippingCompanyBulk() {
+    if (!bulkDeliveryCompanyId || selectedOrderIds.size === 0) return;
+    const company = activeDeliveryCompanies.find(
+      (c) => c.id === bulkDeliveryCompanyId
+    );
+    if (!company) return;
+    setBulkWorking(true);
+    setError(null);
+    const ids = [...selectedOrderIds];
+    const { error: upErr } = await supabase
+      .from("orders")
+      .update({ delivery_company: company.name })
+      .in("id", ids);
+    setBulkWorking(false);
+    if (upErr) {
+      setError(upErr.message);
+      return;
+    }
+    setSelectedOrderIds(new Set());
+    await loadOrders();
+  }
+
+  async function validateShipmentBulk() {
+    if (!bulkDeliveryCompanyId || selectedOrderIds.size === 0) return;
+    setBulkWorking(true);
+    setError(null);
+    try {
+      const res = await fetch(validateShipmentApiUrl(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderIds: [...selectedOrderIds],
+          deliveryCompanyId: bulkDeliveryCompanyId,
+        }),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        details?: unknown;
+        updated?: number;
+      };
+      if (!res.ok) {
+        const detail =
+          typeof data.details === "string"
+            ? data.details
+            : data.details != null
+              ? JSON.stringify(data.details)
+              : "";
+        throw new Error(
+          [data.error ?? `HTTP ${res.status}`, detail].filter(Boolean).join(" — ")
+        );
+      }
+      setSelectedOrderIds(new Set());
+      await loadOrders();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Validate shipment failed.");
+    } finally {
+      setBulkWorking(false);
+    }
+  }
+
+  const allFilteredSelected =
+    filteredOrders.length > 0 &&
+    filteredOrders.every((o) => selectedOrderIds.has(o.id));
+
   return (
     <div className="flex min-h-screen w-full flex-1">
       <AppSidebar
@@ -300,13 +454,17 @@ export function OrdersDashboard() {
             ? "sales_channels"
             : sidebarView === "products"
               ? "products"
-              : sidebarView === "inventory"
-                ? "inventory"
-                : "orders"
+              : sidebarView === "delivery_companies"
+                ? "delivery_companies"
+                : sidebarView === "inventory"
+                  ? "inventory"
+                  : "orders"
         }
         onViewChange={(v) => {
           if (v === "sales_channels") setSidebarView("sales_channels");
           else if (v === "products") setSidebarView("products");
+          else if (v === "delivery_companies")
+            setSidebarView("delivery_companies");
           else if (v === "inventory") setSidebarView("inventory");
           else setSidebarView("orders");
         }}
@@ -320,6 +478,11 @@ export function OrdersDashboard() {
           setSidebarView("products");
           setProductFreshKey((k) => k + 1);
           setProductModalOpen(true);
+        }}
+        activeDeliveryCompanyCount={activeDeliveryCompanyCount}
+        onAddDeliveryCompany={() => {
+          setSidebarView("delivery_companies");
+          setCompanyModalOpen(true);
         }}
         inventoryCount={activeProductCount}
       />
@@ -339,6 +502,13 @@ export function OrdersDashboard() {
             onProductModalClose={() => setProductModalOpen(false)}
             onProductsChanged={onProductsChanged}
             productFreshKey={productFreshKey}
+          />
+        ) : sidebarView === "delivery_companies" ? (
+          <DeliveryCompaniesPage
+            companyModalOpen={companyModalOpen}
+            onCompanyModalOpen={() => setCompanyModalOpen(true)}
+            onCompanyModalClose={() => setCompanyModalOpen(false)}
+            onCompaniesChanged={onDeliveryCompaniesChanged}
           />
         ) : sidebarView === "inventory" ? (
           <InventoryPage />
@@ -604,10 +774,76 @@ export function OrdersDashboard() {
               </div>
             </div>
           )}
+          {navKey === "confirmed" && filteredOrders.length > 0 && (
+            <div className="flex flex-col gap-3 border-b border-slate-800/80 bg-slate-900/30 px-5 py-3 sm:flex-row sm:flex-wrap sm:items-center">
+              <label className="flex min-w-[200px] flex-1 flex-col text-xs font-medium text-slate-500 sm:max-w-xs">
+                Delivery company
+                <select
+                  value={bulkDeliveryCompanyId}
+                  onChange={(e) => setBulkDeliveryCompanyId(e.target.value)}
+                  disabled={bulkWorking}
+                  className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-500/60 disabled:opacity-50"
+                >
+                  <option value="">Select company…</option>
+                  {activeDeliveryCompanies.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex flex-wrap items-end gap-2">
+                <button
+                  type="button"
+                  disabled={
+                    bulkWorking ||
+                    !bulkDeliveryCompanyId ||
+                    selectedOrderIds.size === 0
+                  }
+                  onClick={() => void assignShippingCompanyBulk()}
+                  className="rounded-xl border border-slate-600 bg-slate-800/50 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Assign shipping company
+                </button>
+                <button
+                  type="button"
+                  disabled={
+                    bulkWorking ||
+                    !bulkDeliveryCompanyId ||
+                    selectedOrderIds.size === 0
+                  }
+                  onClick={() => void validateShipmentBulk()}
+                  className="rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-sky-900/30 hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {bulkWorking ? "Working…" : "Validate shipment"}
+                </button>
+              </div>
+              {selectedOrderIds.size > 0 && (
+                <p className="text-xs text-slate-500">
+                  {selectedOrderIds.size} order
+                  {selectedOrderIds.size === 1 ? "" : "s"} selected
+                </p>
+              )}
+            </div>
+          )}
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1180px] text-left text-sm">
+            <table className="w-full min-w-[1320px] text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-800/80 text-xs uppercase tracking-wider text-slate-500">
+                  {navKey === "confirmed" && (
+                    <th className="w-10 px-2 py-3 font-medium">
+                      <input
+                        type="checkbox"
+                        checked={allFilteredSelected}
+                        onChange={(e) =>
+                          toggleSelectAllConfirmed(e.target.checked)
+                        }
+                        disabled={bulkWorking || filteredOrders.length === 0}
+                        className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-indigo-500"
+                        title="Select all in this list"
+                      />
+                    </th>
+                  )}
                   <th className="px-4 py-3 font-medium">Customer</th>
                   <th className="px-4 py-3 font-medium">Phone</th>
                   <th className="px-4 py-3 font-medium">Wilaya</th>
@@ -617,6 +853,8 @@ export function OrdersDashboard() {
                   <th className="px-4 py-3 font-medium">Shipping</th>
                   <th className="px-4 py-3 font-medium">Total</th>
                   <th className="px-4 py-3 font-medium">Delivery</th>
+                  <th className="px-4 py-3 font-medium">Tracking</th>
+                  <th className="px-4 py-3 font-medium">Ship status</th>
                   <th className="px-4 py-3 font-medium">Source</th>
                   <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 font-medium">Created</th>
@@ -627,6 +865,20 @@ export function OrdersDashboard() {
                 {!loading &&
                   filteredOrders.map((o) => (
                     <tr key={o.id} className="hover:bg-slate-800/20">
+                      {navKey === "confirmed" && (
+                        <td className="px-2 py-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedOrderIds.has(o.id)}
+                            onChange={(e) =>
+                              toggleOrderSelected(o.id, e.target.checked)
+                            }
+                            disabled={bulkWorking}
+                            className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-indigo-500"
+                            aria-label={`Select order ${o.customer_name}`}
+                          />
+                        </td>
+                      )}
                       <td className="px-4 py-3 font-medium text-slate-100">
                         {o.customer_name}
                       </td>
@@ -660,6 +912,18 @@ export function OrdersDashboard() {
                         title={o.delivery_company}
                       >
                         {o.delivery_company || "—"}
+                      </td>
+                      <td
+                        className="max-w-[140px] truncate px-4 py-3 font-mono text-xs text-slate-400"
+                        title={o.tracking_number || undefined}
+                      >
+                        {o.tracking_number || "—"}
+                      </td>
+                      <td
+                        className="max-w-[120px] truncate px-4 py-3 text-slate-400"
+                        title={o.shipping_status || undefined}
+                      >
+                        {o.shipping_status || "—"}
                       </td>
                       <td
                         className="max-w-[120px] truncate px-4 py-3 text-slate-400"
