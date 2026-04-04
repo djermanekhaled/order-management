@@ -28,7 +28,7 @@ function Chevron({ open }: { open: boolean }) {
   );
 }
 
-export type AppView = "orders" | "sales_channels" | "products";
+export type AppView = "orders" | "sales_channels" | "products" | "inventory";
 
 interface AppSidebarProps {
   orders: Order[];
@@ -42,6 +42,7 @@ interface AppSidebarProps {
   onAddSalesChannel: () => void;
   activeProductCount: number;
   onAddProduct: () => void;
+  inventoryCount: number;
 }
 
 function NavRow({
@@ -83,6 +84,7 @@ export function AppSidebar({
   onAddSalesChannel,
   activeProductCount,
   onAddProduct,
+  inventoryCount,
 }: AppSidebarProps) {
   const [ordersOpen, setOrdersOpen] = useState(true);
 
@@ -342,6 +344,38 @@ export function AppSidebar({
                 +
               </button>
             </div>
+          </div>
+
+          <div className="mt-2 rounded-xl border border-slate-800/60 bg-slate-900/40 p-1">
+            <button
+              type="button"
+              onClick={() => onViewChange("inventory")}
+              className={`flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-sm font-medium transition ${
+                activeView === "inventory"
+                  ? "bg-indigo-600/25 text-white ring-1 ring-indigo-500/40"
+                  : "text-slate-200 hover:bg-slate-800/60"
+              }`}
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-600/30 text-teal-200">
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
+                    />
+                  </svg>
+                </span>
+                <span className="truncate">Inventory</span>
+              </span>
+              <Badge n={inventoryCount} />
+            </button>
           </div>
         </nav>
       )}

@@ -23,6 +23,7 @@ import type {
 import { AppSidebar } from "./AppSidebar";
 import { OrderFormModal } from "./OrderFormModal";
 import { OrderHistoryPanel } from "./OrderHistoryPanel";
+import { InventoryPage } from "./InventoryPage";
 import { ProductsPage } from "./ProductsPage";
 import { SalesChannelsPage } from "./SalesChannelsPage";
 
@@ -66,7 +67,7 @@ export function OrdersDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sidebarView, setSidebarView] = useState<
-    "orders" | "sales_channels" | "products"
+    "orders" | "sales_channels" | "products" | "inventory"
   >("orders");
   const [channelModalOpen, setChannelModalOpen] = useState(false);
   const [productModalOpen, setProductModalOpen] = useState(false);
@@ -299,11 +300,14 @@ export function OrdersDashboard() {
             ? "sales_channels"
             : sidebarView === "products"
               ? "products"
-              : "orders"
+              : sidebarView === "inventory"
+                ? "inventory"
+                : "orders"
         }
         onViewChange={(v) => {
           if (v === "sales_channels") setSidebarView("sales_channels");
           else if (v === "products") setSidebarView("products");
+          else if (v === "inventory") setSidebarView("inventory");
           else setSidebarView("orders");
         }}
         salesChannelCount={channelCount}
@@ -317,6 +321,7 @@ export function OrdersDashboard() {
           setProductFreshKey((k) => k + 1);
           setProductModalOpen(true);
         }}
+        inventoryCount={activeProductCount}
       />
 
       <div className="min-w-0 flex-1 px-4 py-8 sm:px-6 lg:px-10">
@@ -335,6 +340,8 @@ export function OrdersDashboard() {
             onProductsChanged={onProductsChanged}
             productFreshKey={productFreshKey}
           />
+        ) : sidebarView === "inventory" ? (
+          <InventoryPage />
         ) : (
           <>
         {error && (

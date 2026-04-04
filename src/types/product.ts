@@ -7,6 +7,7 @@ export interface Product {
   confirmation_fee: number;
   tracking_fee: number;
   min_stock_alert: number;
+  current_stock?: number;
   active: boolean;
   created_at: string;
 }
@@ -21,6 +22,7 @@ export interface ProductVariant {
   confirmation_fee: number;
   tracking_fee: number;
   min_stock_alert: number;
+  current_stock?: number;
   active: boolean;
   created_at: string;
 }

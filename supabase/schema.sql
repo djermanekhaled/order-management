@@ -204,6 +204,7 @@ create table if not exists public.products (
   confirmation_fee numeric(12, 2) not null default 0 check (confirmation_fee >= 0),
   tracking_fee numeric(12, 2) not null default 0 check (tracking_fee >= 0),
   min_stock_alert integer not null default 0 check (min_stock_alert >= 0),
+  current_stock integer not null default 0 check (current_stock >= 0),
   active boolean not null default true,
   created_at timestamptz not null default now(),
   constraint products_sku_unique unique (sku)
@@ -219,6 +220,7 @@ create table if not exists public.product_variants (
   confirmation_fee numeric(12, 2) not null default 0 check (confirmation_fee >= 0),
   tracking_fee numeric(12, 2) not null default 0 check (tracking_fee >= 0),
   min_stock_alert integer not null default 0 check (min_stock_alert >= 0),
+  current_stock integer not null default 0 check (current_stock >= 0),
   active boolean not null default true,
   created_at timestamptz not null default now(),
   constraint product_variants_product_sku_unique unique (product_id, sku)
