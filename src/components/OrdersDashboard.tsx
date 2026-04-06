@@ -50,6 +50,13 @@ function formatDate(iso: string) {
   }).format(new Date(iso));
 }
 
+function deliveryTypeTableLabel(
+  t: string | null | undefined
+): string {
+  if (t === "pickup-point") return "Stop desk";
+  return "À domicile";
+}
+
 function localDayBounds(fromStr: string | "", toStr: string | "") {
   let fromMs: number | null = null;
   let toMs: number | null = null;
@@ -869,7 +876,7 @@ export function OrdersDashboard() {
             </div>
           )}
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1320px] text-left text-sm">
+            <table className="w-full min-w-[1780px] text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-800/80 text-xs uppercase tracking-wider text-slate-500">
                   {navKey === "confirmed" && (
@@ -889,12 +896,16 @@ export function OrdersDashboard() {
                   <th className="px-4 py-3 font-medium">Customer</th>
                   <th className="px-4 py-3 font-medium">Phone</th>
                   <th className="px-4 py-3 font-medium">Wilaya</th>
+                  <th className="px-4 py-3 font-medium">Commune</th>
                   <th className="px-4 py-3 font-medium">Product</th>
+                  <th className="px-4 py-3 font-medium">SKU</th>
                   <th className="px-4 py-3 font-medium">Qty</th>
                   <th className="px-4 py-3 font-medium">Items</th>
                   <th className="px-4 py-3 font-medium">Shipping</th>
                   <th className="px-4 py-3 font-medium">Total</th>
+                  <th className="px-4 py-3 font-medium">Delivery Type</th>
                   <th className="px-4 py-3 font-medium">Delivery</th>
+                  <th className="px-4 py-3 font-medium">Internal Tracking ID</th>
                   <th className="px-4 py-3 font-medium">Tracking</th>
                   <th className="px-4 py-3 font-medium">Ship status</th>
                   <th className="px-4 py-3 font-medium">Source</th>
@@ -932,10 +943,22 @@ export function OrdersDashboard() {
                         {o.wilaya || "—"}
                       </td>
                       <td
+                        className="max-w-[120px] truncate px-4 py-3 text-slate-400"
+                        title={o.commune || undefined}
+                      >
+                        {o.commune?.trim() ? o.commune : "—"}
+                      </td>
+                      <td
                         className="max-w-[160px] truncate px-4 py-3 text-slate-300"
                         title={o.product}
                       >
                         {o.product}
+                      </td>
+                      <td
+                        className="max-w-[100px] truncate px-4 py-3 font-mono text-xs text-slate-400"
+                        title={o.sku || undefined}
+                      >
+                        {o.sku?.trim() ? o.sku : "—"}
                       </td>
                       <td className="px-4 py-3 tabular-nums text-slate-300">
                         {o.quantity}
@@ -949,11 +972,22 @@ export function OrdersDashboard() {
                       <td className="px-4 py-3 tabular-nums font-medium text-slate-100">
                         {formatMoneyDzd(orderGrandTotal(o))}
                       </td>
+                      <td className="px-4 py-3 text-slate-400">
+                        {deliveryTypeTableLabel(o.delivery_type)}
+                      </td>
                       <td
                         className="max-w-[120px] truncate px-4 py-3 text-slate-400"
                         title={o.delivery_company}
                       >
                         {o.delivery_company || "—"}
+                      </td>
+                      <td
+                        className="max-w-[140px] truncate px-4 py-3 font-mono text-xs text-slate-400"
+                        title={o.internal_tracking_id || undefined}
+                      >
+                        {o.internal_tracking_id?.trim()
+                          ? o.internal_tracking_id
+                          : "—"}
                       </td>
                       <td
                         className="max-w-[140px] truncate px-4 py-3 font-mono text-xs text-slate-400"
