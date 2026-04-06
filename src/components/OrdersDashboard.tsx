@@ -129,6 +129,12 @@ export function OrdersDashboard() {
     Record<OrderColumnId, boolean>
   >(() => defaultColumnVisibility());
   const [bulkRowsWorking, setBulkRowsWorking] = useState(false);
+  const [filterProductOptions, setFilterProductOptions] = useState<
+    { id: string; name: string }[]
+  >([]);
+  const [filterSalesChannels, setFilterSalesChannels] = useState<
+    { id: string; name: string }[]
+  >([]);
 
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
@@ -161,9 +167,34 @@ export function OrdersDashboard() {
     setOrders((data ?? []) as Order[]);
   }, []);
 
+  const loadFilterPicklists = useCallback(async () => {
+    const [proRes, chRes] = await Promise.all([
+      supabase
+        .from("products")
+        .select("id, name")
+        .eq("active", true)
+        .order("name"),
+      supabase
+        .from("sales_channels")
+        .select("id, name")
+        .eq("status", "active")
+        .order("name"),
+    ]);
+    if (!proRes.error && proRes.data) {
+      setFilterProductOptions(proRes.data as { id: string; name: string }[]);
+    }
+    if (!chRes.error && chRes.data) {
+      setFilterSalesChannels(chRes.data as { id: string; name: string }[]);
+    }
+  }, []);
+
   useEffect(() => {
     void loadOrders();
   }, [loadOrders]);
+
+  useEffect(() => {
+    void loadFilterPicklists();
+  }, [loadFilterPicklists]);
 
   useEffect(() => {
     // Keep "All" selected when switching between main sidebar items.
@@ -203,19 +234,24 @@ export function OrdersDashboard() {
       ) {
         return false;
       }
-      const fp = filterProduct.trim().toLowerCase();
-      if (fp && !o.product.toLowerCase().includes(fp)) return false;
-      const fd = filterDeliveryCompany.trim().toLowerCase();
-      if (fd && !(o.delivery_company || "").toLowerCase().includes(fd)) {
-        return false;
+      if (filterProduct) {
+        const line = o.product.trim();
+        const want = filterProduct.trim();
+        const lineL = line.toLowerCase();
+        const wantL = want.toLowerCase();
+        if (lineL !== wantL && !lineL.includes(wantL)) return false;
+      }
+      if (filterDeliveryCompany) {
+        const dc = (o.delivery_company || "").trim();
+        if (dc !== filterDeliveryCompany.trim()) return false;
       }
       if (filterDeliveryType) {
         const dt = o.delivery_type ?? "home";
         if (dt !== filterDeliveryType) return false;
       }
-      const fs = filterSource.trim().toLowerCase();
-      if (fs && !(o.source ?? "Manual").toLowerCase().includes(fs)) {
-        return false;
+      if (filterSource) {
+        const src = o.source ?? MANUAL_ORDER_SOURCE;
+        if (src !== filterSource) return false;
       }
       return true;
     });
@@ -241,7 +277,8 @@ export function OrdersDashboard() {
 
   const onChannelsChanged = useCallback(() => {
     void loadChannelCount();
-  }, [loadChannelCount]);
+    void loadFilterPicklists();
+  }, [loadChannelCount, loadFilterPicklists]);
 
   useEffect(() => {
     void loadChannelCount();
@@ -257,7 +294,8 @@ export function OrdersDashboard() {
 
   const onProductsChanged = useCallback(() => {
     void loadActiveProductCount();
-  }, [loadActiveProductCount]);
+    void loadFilterPicklists();
+  }, [loadActiveProductCount, loadFilterPicklists]);
 
   useEffect(() => {
     void loadActiveProductCount();
@@ -717,7 +755,10 @@ export function OrdersDashboard() {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => void loadOrders()}
+              onClick={() => {
+                void loadOrders();
+                void loadFilterPicklists();
+              }}
               disabled={loading}
               className="rounded-xl border border-slate-700 bg-slate-800/50 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800 disabled:opacity-50"
             >
@@ -827,25 +868,35 @@ export function OrdersDashboard() {
               <label className="block text-xs font-medium text-slate-500">
                 Product
               </label>
-              <input
-                type="search"
+              <select
                 value={filterProduct}
                 onChange={(e) => setFilterProduct(e.target.value)}
-                placeholder="Contains…"
-                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-indigo-500/60"
-              />
+                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-500/60"
+              >
+                <option value="">All products</option>
+                {filterProductOptions.map((p) => (
+                  <option key={p.id} value={p.name}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-500">
                 Delivery company
               </label>
-              <input
-                type="search"
+              <select
                 value={filterDeliveryCompany}
                 onChange={(e) => setFilterDeliveryCompany(e.target.value)}
-                placeholder="Contains…"
-                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-indigo-500/60"
-              />
+                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-500/60"
+              >
+                <option value="">All companies</option>
+                {deliveryCompanies.map((c) => (
+                  <option key={c.id} value={c.name}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-xs font-medium text-slate-500">
@@ -869,13 +920,19 @@ export function OrdersDashboard() {
               <label className="block text-xs font-medium text-slate-500">
                 Source
               </label>
-              <input
-                type="search"
+              <select
                 value={filterSource}
                 onChange={(e) => setFilterSource(e.target.value)}
-                placeholder="Channel or Manual…"
-                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-indigo-500/60"
-              />
+                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-500/60"
+              >
+                <option value="">All sources</option>
+                <option value={MANUAL_ORDER_SOURCE}>Manual</option>
+                {filterSalesChannels.map((ch) => (
+                  <option key={ch.id} value={ch.name}>
+                    {ch.name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
           <button
