@@ -1253,12 +1253,12 @@ export function OrdersDashboard() {
   );
 }
 
-/** Right sticky cluster: actions 7rem + status 12rem → created offset 19rem. */
+/** Right sticky cluster: actions 7rem + status ~9rem → created offset 16rem. */
 const STICKY_RIGHT_ACTIONS = "sticky right-0 z-30 w-[7rem] min-w-[7rem]";
 const STICKY_RIGHT_STATUS =
-  "sticky right-[7rem] z-25 w-[12rem] min-w-[12rem] max-w-[12rem]";
+  "sticky right-[7rem] z-25 w-max min-w-0 max-w-[9rem] shrink-0";
 const STICKY_RIGHT_CREATED =
-  "sticky right-[19rem] z-20 min-w-[10rem] max-w-[11rem]";
+  "sticky right-[16rem] z-20 min-w-[10rem] max-w-[11rem]";
 
 function orderTableHeaderCell(id: OrderColumnId): ReactElement {
   const stickyActions = id === "actions";
@@ -1274,7 +1274,7 @@ function orderTableHeaderCell(id: OrderColumnId): ReactElement {
       key={id}
       className={[
         stickyActions ? `${STICKY_RIGHT_ACTIONS} px-3 py-3 font-medium ${stickyRight}` : "",
-        stickyStatus ? `${STICKY_RIGHT_STATUS} px-4 py-3 font-medium ${stickyRight}` : "",
+        stickyStatus ? `${STICKY_RIGHT_STATUS} px-2 py-3 font-medium ${stickyRight}` : "",
         stickyCreated ? `${STICKY_RIGHT_CREATED} px-4 py-3 font-medium ${stickyRight}` : "",
         !stickyActions && !stickyStatus && !stickyCreated
           ? "px-4 py-3 font-medium"
@@ -1460,7 +1460,7 @@ function orderTableDataCell(
       return (
         <td
           key={id}
-          className={`${STICKY_RIGHT_STATUS} border-l border-slate-800/80 bg-slate-900/95 px-4 py-3 align-top backdrop-blur-sm group-hover:bg-slate-800/25`}
+          className={`${STICKY_RIGHT_STATUS} border-l border-slate-800/80 bg-slate-900/95 px-2 py-3 align-top backdrop-blur-sm group-hover:bg-slate-800/25`}
         >
           <InlineOrderState
             order={o}
@@ -1586,18 +1586,10 @@ function InlineOrderState({
   const allowed = candidates.filter((c) => isValidTransition(current, c));
   const transitions = allowed
     .filter((s) => keyOf(s) !== currentKey)
+    .filter(
+      (s) => s.status !== "under_process" && s.status !== "cancelled"
+    )
     .map((s) => ({ key: keyOf(s), snap: s }));
-
-  const transitionRest = transitions.filter(
-    (t) =>
-      t.snap.status !== "under_process" && t.snap.status !== "cancelled"
-  );
-  const transitionUnderProcess = transitions.filter(
-    (t) => t.snap.status === "under_process"
-  );
-  const transitionCancelled = transitions.filter(
-    (t) => t.snap.status === "cancelled"
-  );
 
   const chevronStroke =
     order.status === "follow" ? "%231e293b" : "%23ffffff";
@@ -1617,7 +1609,7 @@ function InlineOrderState({
         };
         onApply(next);
       }}
-      className={`w-full max-w-[min(100%,14rem)] cursor-pointer appearance-none rounded-lg border-0 px-2.5 py-1.5 pr-7 text-left text-xs font-semibold leading-snug outline-none shadow-sm focus:ring-2 focus:ring-white/40 disabled:cursor-not-allowed disabled:opacity-50 ${statusBadgeClass(order.status)}`}
+      className={`box-border w-max min-w-0 max-w-[9rem] cursor-pointer appearance-none rounded-lg border-0 px-2 py-1.5 pr-6 text-left text-xs font-semibold leading-snug outline-none shadow-sm focus:ring-2 focus:ring-white/40 disabled:cursor-not-allowed disabled:opacity-50 ${statusBadgeClass(order.status)}`}
       style={{
         backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='${chevronStroke}'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`,
         backgroundRepeat: "no-repeat",
@@ -1626,29 +1618,11 @@ function InlineOrderState({
       }}
     >
       <option value={currentKey}>{fullStatusLine(order)}</option>
-      {transitionRest.map((t) => (
+      {transitions.map((t) => (
         <option key={t.key} value={t.key}>
           {fullStatusLine(t.snap)}
         </option>
       ))}
-      {transitionUnderProcess.length > 0 && (
-        <optgroup label="Under Process">
-          {transitionUnderProcess.map((t) => (
-            <option key={t.key} value={t.key}>
-              {subStatusLabel(t.snap.sub_status)}
-            </option>
-          ))}
-        </optgroup>
-      )}
-      {transitionCancelled.length > 0 && (
-        <optgroup label="Cancelled">
-          {transitionCancelled.map((t) => (
-            <option key={t.key} value={t.key}>
-              {subStatusLabel(t.snap.sub_status)}
-            </option>
-          ))}
-        </optgroup>
-      )}
     </select>
   );
 }
