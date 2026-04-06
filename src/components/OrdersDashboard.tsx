@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactElement,
+} from "react";
 import { WILAYAS, WILAYA_FILTER_ALL } from "../constants/wilayas";
 import { MANUAL_ORDER_SOURCE } from "../constants/source";
 import { exportOrdersToCsv } from "../lib/csv";
@@ -11,6 +17,12 @@ import {
   subStatusLabel,
 } from "../lib/orderWorkflow";
 import { navKeyLabel, orderMatchesNavKey } from "../lib/sidebarNav";
+import {
+  defaultColumnVisibility,
+  ORDER_COLUMN_IDS,
+  ORDER_COLUMN_LABELS,
+  type OrderColumnId,
+} from "../lib/orderTableColumns";
 import { supabase } from "../lib/supabase";
 import type {
   Order,
@@ -107,6 +119,16 @@ export function OrdersDashboard() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [wilayaFilter, setWilayaFilter] = useState<string>(WILAYA_FILTER_ALL);
+  const [filterProduct, setFilterProduct] = useState("");
+  const [filterDeliveryCompany, setFilterDeliveryCompany] = useState("");
+  const [filterDeliveryType, setFilterDeliveryType] = useState<
+    "" | "home" | "pickup-point"
+  >("");
+  const [filterSource, setFilterSource] = useState("");
+  const [columnVisibility, setColumnVisibility] = useState<
+    Record<OrderColumnId, boolean>
+  >(() => defaultColumnVisibility());
+  const [bulkRowsWorking, setBulkRowsWorking] = useState(false);
 
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
@@ -149,8 +171,8 @@ export function OrdersDashboard() {
   }, [navKey]);
 
   useEffect(() => {
+    setSelectedOrderIds(new Set());
     if (navKey !== "confirmed") {
-      setSelectedOrderIds(new Set());
       setBulkDeliveryCompanyId("");
     }
   }, [navKey]);
@@ -181,9 +203,34 @@ export function OrdersDashboard() {
       ) {
         return false;
       }
+      const fp = filterProduct.trim().toLowerCase();
+      if (fp && !o.product.toLowerCase().includes(fp)) return false;
+      const fd = filterDeliveryCompany.trim().toLowerCase();
+      if (fd && !(o.delivery_company || "").toLowerCase().includes(fd)) {
+        return false;
+      }
+      if (filterDeliveryType) {
+        const dt = o.delivery_type ?? "home";
+        if (dt !== filterDeliveryType) return false;
+      }
+      const fs = filterSource.trim().toLowerCase();
+      if (fs && !(o.source ?? "Manual").toLowerCase().includes(fs)) {
+        return false;
+      }
       return true;
     });
-  }, [orders, navKey, subStatusFilter, fromMs, toMs, wilayaFilter]);
+  }, [
+    orders,
+    navKey,
+    subStatusFilter,
+    fromMs,
+    toMs,
+    wilayaFilter,
+    filterProduct,
+    filterDeliveryCompany,
+    filterDeliveryType,
+    filterSource,
+  ]);
 
   const loadChannelCount = useCallback(async () => {
     const { count } = await supabase
@@ -361,6 +408,10 @@ export function OrdersDashboard() {
     setDateFrom("");
     setDateTo("");
     setWilayaFilter(WILAYA_FILTER_ALL);
+    setFilterProduct("");
+    setFilterDeliveryCompany("");
+    setFilterDeliveryType("");
+    setFilterSource("");
   }
 
   const activeDeliveryCompanies = useMemo(
@@ -377,12 +428,92 @@ export function OrdersDashboard() {
     });
   }
 
-  function toggleSelectAllConfirmed(checked: boolean) {
+  function toggleSelectAllFiltered(checked: boolean) {
     if (checked) {
       setSelectedOrderIds(new Set(filteredOrders.map((o) => o.id)));
     } else {
       setSelectedOrderIds(new Set());
     }
+  }
+
+  async function bulkDeleteOrders() {
+    if (selectedOrderIds.size === 0) return;
+    if (
+      !window.confirm(
+        `Delete ${selectedOrderIds.size} order(s)? This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    setBulkRowsWorking(true);
+    setError(null);
+    const ids = [...selectedOrderIds];
+    const { error: delErr } = await supabase.from("orders").delete().in("id", ids);
+    setBulkRowsWorking(false);
+    if (delErr) {
+      setError(delErr.message);
+      return;
+    }
+    setSelectedOrderIds(new Set());
+    await loadOrders();
+  }
+
+  async function bulkConfirmOrders() {
+    const ids = [...selectedOrderIds];
+    const targets = orders.filter(
+      (o) =>
+        ids.includes(o.id) &&
+        (o.status === "new" || o.status === "under_process")
+    );
+    if (targets.length === 0) {
+      setError(
+        "No selected orders can be confirmed (only New or Under Process)."
+      );
+      return;
+    }
+    setBulkRowsWorking(true);
+    setError(null);
+    const { error: upErr } = await supabase
+      .from("orders")
+      .update({ status: "confirmed", sub_status: "confirmed" })
+      .in(
+        "id",
+        targets.map((t) => t.id)
+      );
+    setBulkRowsWorking(false);
+    if (upErr) {
+      setError(upErr.message);
+      return;
+    }
+    setSelectedOrderIds(new Set());
+    await loadOrders();
+  }
+
+  async function bulkCancelOrders() {
+    const ids = [...selectedOrderIds];
+    const targets = orders.filter(
+      (o) => ids.includes(o.id) && o.status !== "cancelled"
+    );
+    if (targets.length === 0) {
+      setError("No selected orders to cancel.");
+      return;
+    }
+    setBulkRowsWorking(true);
+    setError(null);
+    const { error: upErr } = await supabase
+      .from("orders")
+      .update({ status: "cancelled", sub_status: "cancelled" })
+      .in(
+        "id",
+        targets.map((t) => t.id)
+      );
+    setBulkRowsWorking(false);
+    if (upErr) {
+      setError(upErr.message);
+      return;
+    }
+    setSelectedOrderIds(new Set());
+    await loadOrders();
   }
 
   async function assignShippingCompanyBulk() {
@@ -483,6 +614,8 @@ export function OrdersDashboard() {
   const allFilteredSelected =
     filteredOrders.length > 0 &&
     filteredOrders.every((o) => selectedOrderIds.has(o.id));
+
+  const tableBusy = bulkWorking || bulkRowsWorking;
 
   return (
     <div className="flex min-h-screen w-full flex-1">
@@ -605,6 +738,44 @@ export function OrdersDashboard() {
             >
               Export CSV
             </button>
+            <details className="relative">
+              <summary className="cursor-pointer list-none rounded-xl border border-slate-700 bg-slate-800/50 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800 [&::-webkit-details-marker]:hidden">
+                Columns
+              </summary>
+              <div className="absolute right-0 z-40 mt-2 max-h-[min(70vh,28rem)] w-64 overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 py-2 shadow-2xl ring-1 ring-white/10">
+                <div className="border-b border-slate-800 px-3 pb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+                  Visible columns
+                </div>
+                {ORDER_COLUMN_IDS.map((id) => (
+                  <label
+                    key={id}
+                    className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800/80"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={columnVisibility[id]}
+                      onChange={() =>
+                        setColumnVisibility((prev) => ({
+                          ...prev,
+                          [id]: !prev[id],
+                        }))
+                      }
+                      className="h-4 w-4 rounded border-slate-600 bg-slate-950 text-indigo-500"
+                    />
+                    {ORDER_COLUMN_LABELS[id]}
+                  </label>
+                ))}
+                <div className="border-t border-slate-800 px-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setColumnVisibility(defaultColumnVisibility())}
+                    className="text-xs font-medium text-indigo-400 hover:text-indigo-300"
+                  >
+                    Show all columns
+                  </button>
+                </div>
+              </div>
+            </details>
           </div>
         </section>
 
@@ -612,7 +783,7 @@ export function OrdersDashboard() {
           <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
             Advanced filters
           </h3>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             <div>
               <label className="block text-xs font-medium text-slate-500">
                 From date
@@ -652,13 +823,67 @@ export function OrdersDashboard() {
                 ))}
               </select>
             </div>
+            <div className="sm:col-span-2 lg:col-span-1 xl:col-span-1">
+              <label className="block text-xs font-medium text-slate-500">
+                Product
+              </label>
+              <input
+                type="search"
+                value={filterProduct}
+                onChange={(e) => setFilterProduct(e.target.value)}
+                placeholder="Contains…"
+                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-indigo-500/60"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500">
+                Delivery company
+              </label>
+              <input
+                type="search"
+                value={filterDeliveryCompany}
+                onChange={(e) => setFilterDeliveryCompany(e.target.value)}
+                placeholder="Contains…"
+                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-indigo-500/60"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500">
+                Delivery type
+              </label>
+              <select
+                value={filterDeliveryType}
+                onChange={(e) =>
+                  setFilterDeliveryType(
+                    e.target.value as "" | "home" | "pickup-point"
+                  )
+                }
+                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-500/60"
+              >
+                <option value="">All</option>
+                <option value="home">À domicile</option>
+                <option value="pickup-point">Stop desk</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500">
+                Source
+              </label>
+              <input
+                type="search"
+                value={filterSource}
+                onChange={(e) => setFilterSource(e.target.value)}
+                placeholder="Channel or Manual…"
+                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-indigo-500/60"
+              />
+            </div>
           </div>
           <button
             type="button"
             onClick={clearFilters}
             className="mt-4 text-sm text-indigo-400 hover:text-indigo-300"
           >
-            Clear date & wilaya filters
+            Clear filters
           </button>
         </section>
 
@@ -670,6 +895,40 @@ export function OrdersDashboard() {
                 : `${filteredOrders.length} order${filteredOrders.length === 1 ? "" : "s"} match filters`}
             </p>
           </div>
+          {selectedOrderIds.size > 0 && (
+            <div className="flex flex-wrap items-center gap-3 border-b border-slate-800/80 bg-slate-900/50 px-5 py-3">
+              <span className="text-sm font-medium text-slate-200">
+                {selectedOrderIds.size} order
+                {selectedOrderIds.size === 1 ? "" : "s"} selected
+              </span>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={tableBusy}
+                  onClick={() => void bulkConfirmOrders()}
+                  className="rounded-xl border border-emerald-600/50 bg-emerald-950/50 px-3 py-1.5 text-sm font-medium text-emerald-200 hover:bg-emerald-900/40 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Confirm
+                </button>
+                <button
+                  type="button"
+                  disabled={tableBusy}
+                  onClick={() => void bulkCancelOrders()}
+                  className="rounded-xl border border-amber-600/50 bg-amber-950/40 px-3 py-1.5 text-sm font-medium text-amber-200 hover:bg-amber-900/30 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={tableBusy}
+                  onClick={() => void bulkDeleteOrders()}
+                  className="rounded-xl border border-rose-600/50 bg-rose-950/40 px-3 py-1.5 text-sm font-medium text-rose-200 hover:bg-rose-900/40 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          )}
           {navKey === "under_process" && (
             <div className="border-b border-slate-800/80 bg-slate-900/20 px-5 py-3">
               <div className="flex flex-wrap gap-2">
@@ -864,174 +1123,54 @@ export function OrdersDashboard() {
                   {bulkWorking ? "Working…" : "Validate shipment"}
                 </button>
               </div>
-              {selectedOrderIds.size > 0 && (
-                <p className="text-xs text-slate-500">
-                  {selectedOrderIds.size} order
-                  {selectedOrderIds.size === 1 ? "" : "s"} selected
-                </p>
-              )}
             </div>
           )}
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1780px] text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-800/80 text-xs uppercase tracking-wider text-slate-500">
-                  {navKey === "confirmed" && (
-                    <th className="w-10 px-2 py-3 font-medium">
-                      <input
-                        type="checkbox"
-                        checked={allFilteredSelected}
-                        onChange={(e) =>
-                          toggleSelectAllConfirmed(e.target.checked)
-                        }
-                        disabled={bulkWorking || filteredOrders.length === 0}
-                        className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-indigo-500"
-                        title="Select all in this list"
-                      />
-                    </th>
+                  <th className="w-10 px-2 py-3 font-medium">
+                    <input
+                      type="checkbox"
+                      checked={allFilteredSelected}
+                      onChange={(e) =>
+                        toggleSelectAllFiltered(e.target.checked)
+                      }
+                      disabled={tableBusy || filteredOrders.length === 0}
+                      className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-indigo-500"
+                      title="Select all in this list"
+                    />
+                  </th>
+                  {ORDER_COLUMN_IDS.filter((id) => columnVisibility[id]).map(
+                    (id) => orderTableHeaderCell(id)
                   )}
-                  <th className="px-4 py-3 font-medium">Customer</th>
-                  <th className="px-4 py-3 font-medium">Phone</th>
-                  <th className="px-4 py-3 font-medium">Wilaya</th>
-                  <th className="px-4 py-3 font-medium">Commune</th>
-                  <th className="px-4 py-3 font-medium">Product</th>
-                  <th className="px-4 py-3 font-medium">SKU</th>
-                  <th className="px-4 py-3 font-medium">Qty</th>
-                  <th className="px-4 py-3 font-medium">Items</th>
-                  <th className="px-4 py-3 font-medium">Shipping</th>
-                  <th className="px-4 py-3 font-medium">Total</th>
-                  <th className="px-4 py-3 font-medium">Delivery Type</th>
-                  <th className="px-4 py-3 font-medium">Delivery</th>
-                  <th className="px-4 py-3 font-medium">Internal Tracking ID</th>
-                  <th className="px-4 py-3 font-medium">Tracking</th>
-                  <th className="px-4 py-3 font-medium">Ship status</th>
-                  <th className="px-4 py-3 font-medium">Source</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Created</th>
-                  <th className="px-4 py-3 font-medium text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
                 {!loading &&
                   filteredOrders.map((o) => (
                     <tr key={o.id} className="hover:bg-slate-800/20">
-                      {navKey === "confirmed" && (
-                        <td className="px-2 py-3">
-                          <input
-                            type="checkbox"
-                            checked={selectedOrderIds.has(o.id)}
-                            onChange={(e) =>
-                              toggleOrderSelected(o.id, e.target.checked)
-                            }
-                            disabled={bulkWorking}
-                            className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-indigo-500"
-                            aria-label={`Select order ${o.customer_name}`}
-                          />
-                        </td>
-                      )}
-                      <td className="px-4 py-3 font-medium text-slate-100">
-                        {o.customer_name}
-                      </td>
-                      <td className="px-4 py-3 text-slate-400">{o.phone || "—"}</td>
-                      <td
-                        className="max-w-[140px] truncate px-4 py-3 text-slate-400"
-                        title={o.wilaya}
-                      >
-                        {o.wilaya || "—"}
-                      </td>
-                      <td
-                        className="max-w-[120px] truncate px-4 py-3 text-slate-400"
-                        title={o.commune || undefined}
-                      >
-                        {o.commune?.trim() ? o.commune : "—"}
-                      </td>
-                      <td
-                        className="max-w-[160px] truncate px-4 py-3 text-slate-300"
-                        title={o.product}
-                      >
-                        {o.product}
-                      </td>
-                      <td
-                        className="max-w-[100px] truncate px-4 py-3 font-mono text-xs text-slate-400"
-                        title={o.sku || undefined}
-                      >
-                        {o.sku?.trim() ? o.sku : "—"}
-                      </td>
-                      <td className="px-4 py-3 tabular-nums text-slate-300">
-                        {o.quantity}
-                      </td>
-                      <td className="px-4 py-3 tabular-nums text-slate-200">
-                        {formatMoneyDzd(Number(o.amount))}
-                      </td>
-                      <td className="px-4 py-3 tabular-nums text-slate-300">
-                        {formatMoneyDzd(Number(o.shipping_cost ?? 0))}
-                      </td>
-                      <td className="px-4 py-3 tabular-nums font-medium text-slate-100">
-                        {formatMoneyDzd(orderGrandTotal(o))}
-                      </td>
-                      <td className="px-4 py-3 text-slate-400">
-                        {deliveryTypeTableLabel(o.delivery_type)}
-                      </td>
-                      <td
-                        className="max-w-[120px] truncate px-4 py-3 text-slate-400"
-                        title={o.delivery_company}
-                      >
-                        {o.delivery_company || "—"}
-                      </td>
-                      <td
-                        className="max-w-[140px] truncate px-4 py-3 font-mono text-xs text-slate-400"
-                        title={o.internal_tracking_id || undefined}
-                      >
-                        {o.internal_tracking_id?.trim()
-                          ? o.internal_tracking_id
-                          : "—"}
-                      </td>
-                      <td
-                        className="max-w-[140px] truncate px-4 py-3 font-mono text-xs text-slate-400"
-                        title={o.tracking_number || undefined}
-                      >
-                        {o.tracking_number || "—"}
-                      </td>
-                      <td
-                        className="max-w-[120px] truncate px-4 py-3 text-slate-400"
-                        title={o.shipping_status || undefined}
-                      >
-                        {o.shipping_status || "—"}
-                      </td>
-                      <td
-                        className="max-w-[120px] truncate px-4 py-3 text-slate-400"
-                        title={o.source ?? "Manual"}
-                      >
-                        {o.source ?? "Manual"}
-                      </td>
-                      <td className="px-4 py-3">
-                        <InlineOrderState
-                          order={o}
-                          disabled={savingStateId === o.id}
-                          onApply={(next) => void applyInlineSnapshot(o, next)}
+                      <td className="px-2 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedOrderIds.has(o.id)}
+                          onChange={(e) =>
+                            toggleOrderSelected(o.id, e.target.checked)
+                          }
+                          disabled={tableBusy}
+                          className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-indigo-500"
+                          aria-label={`Select order ${o.customer_name}`}
                         />
                       </td>
-                      <td className="px-4 py-3 text-slate-500">
-                        {formatDate(o.created_at)}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => openEdit(o)}
-                            className="rounded-lg border border-slate-600 px-2 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => openHistory(o)}
-                            className="rounded-lg border border-indigo-600/40 px-2 py-1 text-xs font-medium text-indigo-200 hover:bg-indigo-950/50"
-                          >
-                            History
-                          </button>
-                        </div>
-                      </td>
+                      {ORDER_COLUMN_IDS.filter((id) => columnVisibility[id]).map(
+                        (id) =>
+                          orderTableDataCell(id, o, {
+                            savingStateId,
+                            onApplySnapshot: applyInlineSnapshot,
+                            onEdit: openEdit,
+                            onHistory: openHistory,
+                          })
+                      )}
                     </tr>
                   ))}
               </tbody>
@@ -1064,6 +1203,203 @@ export function OrdersDashboard() {
       </div>
     </div>
   );
+}
+
+function orderTableHeaderCell(id: OrderColumnId): ReactElement {
+  const right = id === "actions";
+  return (
+    <th
+      key={id}
+      className={right ? "px-4 py-3 text-right font-medium" : "px-4 py-3 font-medium"}
+    >
+      {ORDER_COLUMN_LABELS[id]}
+    </th>
+  );
+}
+
+function orderTableDataCell(
+  id: OrderColumnId,
+  o: Order,
+  ctx: {
+    savingStateId: string | null;
+    onApplySnapshot: (order: Order, next: OrderSnapshot) => void | Promise<void>;
+    onEdit: (order: Order) => void;
+    onHistory: (order: Order) => void;
+  }
+): ReactElement {
+  switch (id) {
+    case "customer":
+      return (
+        <td key={id} className="px-4 py-3 font-medium text-slate-100">
+          {o.customer_name}
+        </td>
+      );
+    case "phone":
+      return (
+        <td key={id} className="px-4 py-3 text-slate-400">
+          {o.phone || "—"}
+        </td>
+      );
+    case "wilaya":
+      return (
+        <td
+          key={id}
+          className="max-w-[140px] truncate px-4 py-3 text-slate-400"
+          title={o.wilaya}
+        >
+          {o.wilaya || "—"}
+        </td>
+      );
+    case "commune":
+      return (
+        <td
+          key={id}
+          className="max-w-[120px] truncate px-4 py-3 text-slate-400"
+          title={o.commune || undefined}
+        >
+          {o.commune?.trim() ? o.commune : "—"}
+        </td>
+      );
+    case "product":
+      return (
+        <td
+          key={id}
+          className="max-w-[160px] truncate px-4 py-3 text-slate-300"
+          title={o.product}
+        >
+          {o.product}
+        </td>
+      );
+    case "sku":
+      return (
+        <td
+          key={id}
+          className="max-w-[100px] truncate px-4 py-3 font-mono text-xs text-slate-400"
+          title={o.sku || undefined}
+        >
+          {o.sku?.trim() ? o.sku : "—"}
+        </td>
+      );
+    case "qty":
+      return (
+        <td key={id} className="px-4 py-3 tabular-nums text-slate-300">
+          {o.quantity}
+        </td>
+      );
+    case "items":
+      return (
+        <td key={id} className="px-4 py-3 tabular-nums text-slate-200">
+          {formatMoneyDzd(Number(o.amount))}
+        </td>
+      );
+    case "shipping":
+      return (
+        <td key={id} className="px-4 py-3 tabular-nums text-slate-300">
+          {formatMoneyDzd(Number(o.shipping_cost ?? 0))}
+        </td>
+      );
+    case "total":
+      return (
+        <td key={id} className="px-4 py-3 tabular-nums font-medium text-slate-100">
+          {formatMoneyDzd(orderGrandTotal(o))}
+        </td>
+      );
+    case "deliveryType":
+      return (
+        <td key={id} className="px-4 py-3 text-slate-400">
+          {deliveryTypeTableLabel(o.delivery_type)}
+        </td>
+      );
+    case "delivery":
+      return (
+        <td
+          key={id}
+          className="max-w-[120px] truncate px-4 py-3 text-slate-400"
+          title={o.delivery_company}
+        >
+          {o.delivery_company || "—"}
+        </td>
+      );
+    case "internalTracking":
+      return (
+        <td
+          key={id}
+          className="max-w-[140px] truncate px-4 py-3 font-mono text-xs text-slate-400"
+          title={o.internal_tracking_id || undefined}
+        >
+          {o.internal_tracking_id?.trim() ? o.internal_tracking_id : "—"}
+        </td>
+      );
+    case "tracking":
+      return (
+        <td
+          key={id}
+          className="max-w-[140px] truncate px-4 py-3 font-mono text-xs text-slate-400"
+          title={o.tracking_number || undefined}
+        >
+          {o.tracking_number || "—"}
+        </td>
+      );
+    case "shipStatus":
+      return (
+        <td
+          key={id}
+          className="max-w-[120px] truncate px-4 py-3 text-slate-400"
+          title={o.shipping_status || undefined}
+        >
+          {o.shipping_status || "—"}
+        </td>
+      );
+    case "source":
+      return (
+        <td
+          key={id}
+          className="max-w-[120px] truncate px-4 py-3 text-slate-400"
+          title={o.source ?? "Manual"}
+        >
+          {o.source ?? "Manual"}
+        </td>
+      );
+    case "status":
+      return (
+        <td key={id} className="px-4 py-3">
+          <InlineOrderState
+            order={o}
+            disabled={ctx.savingStateId === o.id}
+            onApply={(next) => void ctx.onApplySnapshot(o, next)}
+          />
+        </td>
+      );
+    case "created":
+      return (
+        <td key={id} className="px-4 py-3 text-slate-500">
+          {formatDate(o.created_at)}
+        </td>
+      );
+    case "actions":
+      return (
+        <td key={id} className="px-4 py-3 text-right">
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => ctx.onEdit(o)}
+              className="rounded-lg border border-slate-600 px-2 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              onClick={() => ctx.onHistory(o)}
+              className="rounded-lg border border-indigo-600/40 px-2 py-1 text-xs font-medium text-indigo-200 hover:bg-indigo-950/50"
+            >
+              History
+            </button>
+          </div>
+        </td>
+      );
+    default:
+      return <td key={id} />;
+  }
 }
 
 function InlineOrderState({

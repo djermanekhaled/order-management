@@ -194,6 +194,10 @@ create policy "Allow public update on orders"
   using (true)
   with check (true);
 
+create policy "Allow public delete on orders"
+  on public.orders for delete
+  using (true);
+
 drop policy if exists "Allow public read order history" on public.order_status_history;
 
 create policy "Allow public read order history"
