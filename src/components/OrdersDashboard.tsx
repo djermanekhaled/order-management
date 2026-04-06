@@ -1253,29 +1253,39 @@ export function OrdersDashboard() {
   );
 }
 
-/** Right sticky cluster: actions 7rem + status up to 11rem → created offset 18rem. */
-const STICKY_RIGHT_ACTIONS = "sticky right-0 z-30 w-[7rem] min-w-[7rem]";
+/**
+ * Right sticky cluster (DOM … | actions | created | status).
+ * Status is flush to the table’s right edge; created sits left of it with no gap.
+ */
 const STICKY_RIGHT_STATUS =
-  "sticky right-[7rem] z-25 w-max min-w-0 max-w-[11rem] shrink-0";
+  "sticky right-0 z-30 w-[9rem] min-w-[9rem] max-w-[9rem] shrink-0";
 const STICKY_RIGHT_CREATED =
-  "sticky right-[18rem] z-20 min-w-[10rem] max-w-[11rem]";
+  "sticky right-[9rem] z-25 w-[11rem] min-w-[11rem] max-w-[11rem] shrink-0";
+const STICKY_RIGHT_ACTIONS =
+  "sticky right-[20rem] z-20 w-[7rem] min-w-[7rem]";
 
 function orderTableHeaderCell(id: OrderColumnId): ReactElement {
   const stickyActions = id === "actions";
   const stickyStatus = id === "status";
   const stickyCreated = id === "created";
   const idCol = id === "internalTracking";
-  const stickyRight =
+  const stickyBg =
     stickyActions || stickyStatus || stickyCreated
-      ? "border-l border-slate-800/80 bg-slate-900/98 backdrop-blur-sm"
+      ? "bg-slate-900/98 backdrop-blur-sm"
       : "";
   return (
     <th
       key={id}
       className={[
-        stickyActions ? `${STICKY_RIGHT_ACTIONS} px-3 py-3 font-medium ${stickyRight}` : "",
-        stickyStatus ? `${STICKY_RIGHT_STATUS} pl-1 pr-2 py-3 font-medium ${stickyRight}` : "",
-        stickyCreated ? `${STICKY_RIGHT_CREATED} pl-4 pr-1 py-3 font-medium ${stickyRight}` : "",
+        stickyActions
+          ? `${STICKY_RIGHT_ACTIONS} border-l border-slate-800/80 px-3 py-3 font-medium ${stickyBg}`
+          : "",
+        stickyCreated
+          ? `${STICKY_RIGHT_CREATED} py-3 pl-4 pr-0 text-right font-medium ${stickyBg}`
+          : "",
+        stickyStatus
+          ? `${STICKY_RIGHT_STATUS} py-3 pl-0 pr-0 font-medium ${stickyBg}`
+          : "",
         !stickyActions && !stickyStatus && !stickyCreated
           ? "px-4 py-3 font-medium"
           : "",
@@ -1451,11 +1461,7 @@ function orderTableDataCell(
       return (
         <td
           key={id}
-          className={`${STICKY_RIGHT_CREATED} border-l border-slate-800/80 bg-slate-900/95 py-3 text-slate-500 backdrop-blur-sm group-hover:bg-slate-800/25 ${
-            o.status === "confirmed"
-              ? "px-4 pl-4 pr-0 text-right align-middle tabular-nums"
-              : "px-4 align-top"
-          }`}
+          className={`${STICKY_RIGHT_CREATED} border-l border-slate-800/80 bg-slate-900/95 py-3 pl-3 pr-0 text-right align-top tabular-nums text-slate-500 backdrop-blur-sm group-hover:bg-slate-800/25`}
         >
           {formatDate(o.created_at)}
         </td>
@@ -1464,11 +1470,7 @@ function orderTableDataCell(
       return (
         <td
           key={id}
-          className={`${STICKY_RIGHT_STATUS} border-l border-slate-800/80 bg-slate-900/95 py-3 backdrop-blur-sm group-hover:bg-slate-800/25 ${
-            o.status === "confirmed"
-              ? "overflow-visible pl-0 pr-2 align-middle"
-              : "px-2 align-top"
-          }`}
+          className={`${STICKY_RIGHT_STATUS} bg-slate-900/95 py-3 pl-0 pr-0 align-top backdrop-blur-sm group-hover:bg-slate-800/25`}
         >
           <InlineOrderState
             order={o}
@@ -1626,10 +1628,8 @@ function InlineOrderState({
   const chevronStroke =
     order.status === "follow" ? "%231e293b" : "%23ffffff";
 
-  const selectClassConfirmed =
-    "box-border w-full min-w-0 max-w-full cursor-pointer appearance-none rounded-lg border-0 px-3 py-2 pr-9 text-left text-sm font-semibold leading-normal outline-none shadow-sm focus:ring-2 focus:ring-white/40 disabled:cursor-not-allowed disabled:opacity-50";
-  const selectClassDefault =
-    "box-border w-max min-w-0 max-w-[9rem] cursor-pointer appearance-none rounded-lg border-0 px-2 py-1.5 pr-6 text-left text-xs font-semibold leading-snug outline-none shadow-sm focus:ring-2 focus:ring-white/40 disabled:cursor-not-allowed disabled:opacity-50";
+  const selectClass =
+    "box-border w-full min-w-0 max-w-full cursor-pointer appearance-none rounded-lg border-0 px-2 py-1.5 pr-6 text-left text-xs font-semibold leading-snug outline-none shadow-sm focus:ring-2 focus:ring-white/40 disabled:cursor-not-allowed disabled:opacity-50";
 
   return (
     <select
@@ -1646,14 +1646,12 @@ function InlineOrderState({
         };
         onApply(next);
       }}
-      className={`${isConfirmedMainRow ? selectClassConfirmed : selectClassDefault} ${statusBadgeClass(order.status)}`}
+      className={`${selectClass} ${statusBadgeClass(order.status)}`}
       style={{
         backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='${chevronStroke}'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`,
         backgroundRepeat: "no-repeat",
-        backgroundPosition: isConfirmedMainRow
-          ? "right 0.6rem center"
-          : "right 0.45rem center",
-        backgroundSize: isConfirmedMainRow ? "0.75rem" : "0.65rem",
+        backgroundPosition: "right 0.45rem center",
+        backgroundSize: "0.65rem",
       }}
     >
       {isConfirmedMainRow
