@@ -1253,12 +1253,12 @@ export function OrdersDashboard() {
   );
 }
 
-/** Right sticky cluster: actions 7rem + status ~9rem → created offset 16rem. */
+/** Right sticky cluster: actions 7rem + status up to 11rem → created offset 18rem. */
 const STICKY_RIGHT_ACTIONS = "sticky right-0 z-30 w-[7rem] min-w-[7rem]";
 const STICKY_RIGHT_STATUS =
-  "sticky right-[7rem] z-25 w-max min-w-0 max-w-[9rem] shrink-0";
+  "sticky right-[7rem] z-25 w-max min-w-0 max-w-[11rem] shrink-0";
 const STICKY_RIGHT_CREATED =
-  "sticky right-[16rem] z-20 min-w-[10rem] max-w-[11rem]";
+  "sticky right-[18rem] z-20 min-w-[10rem] max-w-[11rem]";
 
 function orderTableHeaderCell(id: OrderColumnId): ReactElement {
   const stickyActions = id === "actions";
@@ -1274,8 +1274,8 @@ function orderTableHeaderCell(id: OrderColumnId): ReactElement {
       key={id}
       className={[
         stickyActions ? `${STICKY_RIGHT_ACTIONS} px-3 py-3 font-medium ${stickyRight}` : "",
-        stickyStatus ? `${STICKY_RIGHT_STATUS} px-2 py-3 font-medium ${stickyRight}` : "",
-        stickyCreated ? `${STICKY_RIGHT_CREATED} px-4 py-3 font-medium ${stickyRight}` : "",
+        stickyStatus ? `${STICKY_RIGHT_STATUS} pl-1 pr-2 py-3 font-medium ${stickyRight}` : "",
+        stickyCreated ? `${STICKY_RIGHT_CREATED} pl-4 pr-1 py-3 font-medium ${stickyRight}` : "",
         !stickyActions && !stickyStatus && !stickyCreated
           ? "px-4 py-3 font-medium"
           : "",
@@ -1451,7 +1451,11 @@ function orderTableDataCell(
       return (
         <td
           key={id}
-          className={`${STICKY_RIGHT_CREATED} border-l border-slate-800/80 bg-slate-900/95 px-4 py-3 text-slate-500 backdrop-blur-sm group-hover:bg-slate-800/25`}
+          className={`${STICKY_RIGHT_CREATED} border-l border-slate-800/80 bg-slate-900/95 py-3 text-slate-500 backdrop-blur-sm group-hover:bg-slate-800/25 ${
+            o.status === "confirmed"
+              ? "px-4 pl-4 pr-0 text-right align-middle tabular-nums"
+              : "px-4 align-top"
+          }`}
         >
           {formatDate(o.created_at)}
         </td>
@@ -1460,10 +1464,10 @@ function orderTableDataCell(
       return (
         <td
           key={id}
-          className={`${STICKY_RIGHT_STATUS} border-l border-slate-800/80 bg-slate-900/95 py-3 align-top backdrop-blur-sm group-hover:bg-slate-800/25 ${
+          className={`${STICKY_RIGHT_STATUS} border-l border-slate-800/80 bg-slate-900/95 py-3 backdrop-blur-sm group-hover:bg-slate-800/25 ${
             o.status === "confirmed"
-              ? "overflow-hidden pl-2 pr-3"
-              : "px-2"
+              ? "overflow-visible pl-0 pr-2 align-middle"
+              : "px-2 align-top"
           }`}
         >
           <InlineOrderState
@@ -1623,7 +1627,7 @@ function InlineOrderState({
     order.status === "follow" ? "%231e293b" : "%23ffffff";
 
   const selectClassConfirmed =
-    "box-border w-full min-w-0 max-w-full cursor-pointer appearance-none rounded-lg border-0 px-2 py-1.5 pr-6 text-left text-[11px] font-semibold leading-tight outline-none shadow-sm focus:ring-2 focus:ring-white/40 disabled:cursor-not-allowed disabled:opacity-50";
+    "box-border w-full min-w-0 max-w-full cursor-pointer appearance-none rounded-lg border-0 px-3 py-2 pr-9 text-left text-sm font-semibold leading-normal outline-none shadow-sm focus:ring-2 focus:ring-white/40 disabled:cursor-not-allowed disabled:opacity-50";
   const selectClassDefault =
     "box-border w-max min-w-0 max-w-[9rem] cursor-pointer appearance-none rounded-lg border-0 px-2 py-1.5 pr-6 text-left text-xs font-semibold leading-snug outline-none shadow-sm focus:ring-2 focus:ring-white/40 disabled:cursor-not-allowed disabled:opacity-50";
 
@@ -1646,8 +1650,10 @@ function InlineOrderState({
       style={{
         backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='${chevronStroke}'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`,
         backgroundRepeat: "no-repeat",
-        backgroundPosition: "right 0.45rem center",
-        backgroundSize: "0.65rem",
+        backgroundPosition: isConfirmedMainRow
+          ? "right 0.6rem center"
+          : "right 0.45rem center",
+        backgroundSize: isConfirmedMainRow ? "0.75rem" : "0.65rem",
       }}
     >
       {isConfirmedMainRow
