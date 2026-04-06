@@ -60,11 +60,12 @@ function orderGrandTotal(o: Order): number {
   );
 }
 
-function formatDate(iso: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(new Date(iso));
+function formatCreatedColumnDate(iso: string) {
+  const d = new Date(iso);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}/${m}/${day}`;
 }
 
 function localDayBounds(fromStr: string | "", toStr: string | "") {
@@ -1281,7 +1282,7 @@ function orderTableHeaderCell(id: OrderColumnId): ReactElement {
           ? `${STICKY_RIGHT_ACTIONS} border-l border-slate-800/80 px-3 py-3 font-medium ${stickyBg}`
           : "",
         stickyCreated
-          ? `${STICKY_RIGHT_CREATED} py-3 pl-4 pr-0 text-right font-medium ${stickyBg}`
+          ? `${STICKY_RIGHT_CREATED} px-3 py-3 text-center font-medium ${stickyBg}`
           : "",
         stickyStatus
           ? `${STICKY_RIGHT_STATUS} py-3 pl-0 pr-0 font-medium ${stickyBg}`
@@ -1461,9 +1462,9 @@ function orderTableDataCell(
       return (
         <td
           key={id}
-          className={`${STICKY_RIGHT_CREATED} border-l border-slate-800/80 bg-slate-900/95 py-3 pl-3 pr-0 text-right align-top tabular-nums text-slate-500 backdrop-blur-sm group-hover:bg-slate-800/25`}
+          className={`${STICKY_RIGHT_CREATED} border-l border-slate-800/80 bg-slate-900/95 px-3 py-3 text-center align-top tabular-nums text-slate-500 backdrop-blur-sm group-hover:bg-slate-800/25`}
         >
-          {formatDate(o.created_at)}
+          {formatCreatedColumnDate(o.created_at)}
         </td>
       );
     case "status":
