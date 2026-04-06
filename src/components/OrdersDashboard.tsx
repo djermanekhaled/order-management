@@ -328,19 +328,10 @@ export function OrdersDashboard() {
 
   async function handleSaveOrder(
     values: OrderFormValues,
-    previous: OrderSnapshot | null
+    _previous: OrderSnapshot | null
   ) {
     if (!isValidOrderState(values.status, values.sub_status)) {
       throw new Error("Invalid status / sub-status combination.");
-    }
-    if (
-      previous &&
-      !isValidTransition(previous, {
-        status: values.status,
-        sub_status: values.sub_status,
-      })
-    ) {
-      throw new Error("Invalid status / sub-status transition.");
     }
 
     const shippingCost = Math.max(0, Number(values.shipping_cost) || 0);

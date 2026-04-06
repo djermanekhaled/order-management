@@ -1,24 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { WILAYAS } from "../constants/wilayas";
 import { supabase } from "../lib/supabase";
-import {
-  allowedNextStatuses,
-  CREATE_STATUS_OPTIONS,
-  defaultSubForStatus,
-  isValidOrderState,
-  isValidTransition,
-  ORDER_STATUSES,
-  statusLabel,
-  subStatusLabel,
-  subStatusesForStatus,
-} from "../lib/orderWorkflow";
+import { isValidOrderState } from "../lib/orderWorkflow";
 import { generateInternalTrackingId } from "../lib/internalTracking";
 import type {
   Order,
   OrderDeliveryType,
   OrderFormValues,
-  OrderStatus,
-  OrderSubStatus,
   OrderSnapshot,
 } from "../types/order";
 
@@ -43,6 +31,32 @@ const emptyForm: OrderFormValues = {
 };
 
 type Mode = "create" | "edit";
+
+/** Form-only status options → stored workflow snapshot. */
+type FormStatusChoice = "new" | "confirmed" | "postponed";
+
+function snapshotFromFormStatusChoice(
+  choice: FormStatusChoice
+): Pick<OrderFormValues, "status" | "sub_status"> {
+  switch (choice) {
+    case "new":
+      return { status: "new", sub_status: null };
+    case "confirmed":
+      return { status: "confirmed", sub_status: "confirmed" };
+    case "postponed":
+      return { status: "under_process", sub_status: "postponed" };
+  }
+}
+
+function formStatusChoiceFromValues(v: OrderFormValues): FormStatusChoice {
+  if (v.status === "new") return "new";
+  if (v.status === "under_process" && v.sub_status === "postponed") {
+    return "postponed";
+  }
+  if (v.status === "confirmed" || v.status === "follow") return "confirmed";
+  if (v.status === "under_process") return "confirmed";
+  return "new";
+}
 
 interface OrderFormModalProps {
   open: boolean;
@@ -176,20 +190,6 @@ export function OrderFormModal({
     }
   }, [open, mode, initialOrder]);
 
-  if (!open) return null;
-
-  const statusChoices: OrderStatus[] =
-    mode === "create"
-      ? CREATE_STATUS_OPTIONS
-      : (() => {
-          const next = allowedNextStatuses(values.status);
-          const set = new Set<OrderStatus>([values.status, ...next]);
-          return ORDER_STATUSES.filter((s) => set.has(s));
-        })();
-
-  const subChoices = subStatusesForStatus(values.status);
-  const showSubSelect = subChoices.some((s) => s !== null);
-
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setLocalError(null);
@@ -212,16 +212,6 @@ export function OrderFormModal({
             sub_status: initialOrder.sub_status ?? null,
           }
         : null;
-    if (
-      prevSnap &&
-      !isValidTransition(prevSnap, {
-        status: values.status,
-        sub_status: values.sub_status,
-      })
-    ) {
-      setLocalError("That status / sub-status change is not allowed.");
-      return;
-    }
     setSaving(true);
     try {
       const valuesToSave: OrderFormValues =
@@ -238,6 +228,8 @@ export function OrderFormModal({
       setSaving(false);
     }
   }
+
+  if (!open) return null;
 
   return (
     <div
@@ -538,48 +530,21 @@ export function OrderFormModal({
                 Status
               </label>
               <select
-                value={values.status}
+                value={formStatusChoiceFromValues(values)}
                 onChange={(e) => {
-                  const ns = e.target.value as OrderStatus;
+                  const choice = e.target.value as FormStatusChoice;
                   setValues((v) => ({
                     ...v,
-                    status: ns,
-                    sub_status: defaultSubForStatus(ns),
+                    ...snapshotFromFormStatusChoice(choice),
                   }));
                 }}
                 className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"
               >
-                {statusChoices.map((s) => (
-                  <option key={s} value={s}>
-                    {statusLabel(s)}
-                  </option>
-                ))}
+                <option value="new">New</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="postponed">Postponed</option>
               </select>
             </div>
-            {showSubSelect && (
-              <div className="sm:col-span-2">
-                <label className="block text-sm font-medium text-slate-300">
-                  Sub-status
-                </label>
-                <select
-                  value={values.sub_status ?? ""}
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    setValues((v) => ({
-                      ...v,
-                      sub_status: raw === "" ? null : (raw as OrderSubStatus),
-                    }));
-                  }}
-                  className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"
-                >
-                  {subChoices.map((s) => (
-                    <option key={s ?? "none"} value={s ?? ""}>
-                      {subStatusLabel(s)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
           </div>
 
           <div className="flex gap-3 pt-2">
