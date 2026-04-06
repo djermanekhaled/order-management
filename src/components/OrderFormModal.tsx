@@ -28,6 +28,7 @@ const emptyForm: OrderFormValues = {
   commune: "",
   address: "",
   product: "",
+  sku: "",
   quantity: 1,
   amount: 0,
   notes: "",
@@ -70,6 +71,7 @@ export function OrderFormModal({
         commune: initialOrder.commune ?? "",
         address: initialOrder.address ?? "",
         product: initialOrder.product,
+        sku: initialOrder.sku ?? "",
         quantity: initialOrder.quantity ?? 1,
         amount: Number(initialOrder.amount),
         notes: initialOrder.notes ?? "",
@@ -87,7 +89,7 @@ export function OrderFormModal({
         ...emptyForm,
         status: "new",
         sub_status: null,
-        internal_tracking_id: generateInternalTrackingId(),
+        internal_tracking_id: "",
       });
     }
   }, [open, mode, initialOrder]);
@@ -140,7 +142,11 @@ export function OrderFormModal({
     }
     setSaving(true);
     try {
-      await onSubmit(values, prevSnap);
+      const valuesToSave: OrderFormValues =
+        mode === "create"
+          ? { ...values, internal_tracking_id: generateInternalTrackingId() }
+          : values;
+      await onSubmit(valuesToSave, prevSnap);
       onClose();
     } catch (err) {
       setLocalError(
@@ -247,7 +253,7 @@ export function OrderFormModal({
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300">
-                Delivery type
+                Delivery Type
               </label>
               <select
                 value={values.delivery_type}
@@ -265,13 +271,20 @@ export function OrderFormModal({
             </div>
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-slate-300">
-                Internal ref
+                Internal Tracking ID
               </label>
               <input
                 readOnly
                 value={values.internal_tracking_id}
-                className="mt-1 w-full cursor-default rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-slate-400 outline-none"
-                title="Generated automatically for this order"
+                placeholder={
+                  mode === "create" ? "Assigned when you save" : undefined
+                }
+                className="mt-1 w-full cursor-default rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-slate-400 outline-none placeholder:text-slate-600"
+                title={
+                  mode === "create"
+                    ? "Generated on save (ORD-YYYYMMDD-XXXX)"
+                    : "Internal reference"
+                }
               />
             </div>
             <div className="sm:col-span-2">
@@ -297,6 +310,19 @@ export function OrderFormModal({
                 onChange={(e) =>
                   setValues((v) => ({ ...v, product: e.target.value }))
                 }
+                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-slate-300">
+                SKU
+              </label>
+              <input
+                value={values.sku}
+                onChange={(e) =>
+                  setValues((v) => ({ ...v, sku: e.target.value }))
+                }
+                placeholder="Product or variant SKU (optional)"
                 className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"
               />
             </div>

@@ -35,6 +35,8 @@ export interface Order {
   commune: string;
   address: string;
   product: string;
+  /** Product / line SKU (optional). */
+  sku: string;
   quantity: number;
   /** Product / line-items subtotal (excludes shipping). */
   amount: number;
@@ -51,7 +53,7 @@ export interface Order {
   delivery_type: OrderDeliveryType;
   shipping_status?: string | null;
   tracking_number?: string;
-  /** Internal reference (e.g. ORD-2026-XXXX). */
+  /** Internal reference (e.g. ORD-YYYYMMDD-XXXX). */
   internal_tracking_id: string;
   created_at: string;
   updated_at: string;
@@ -64,6 +66,8 @@ export interface OrderFormValues {
   commune: string;
   address: string;
   product: string;
+  /** Product / line SKU (optional). */
+  sku: string;
   quantity: number;
   amount: number;
   notes: string;

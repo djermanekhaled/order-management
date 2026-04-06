@@ -265,6 +265,7 @@ export function OrdersDashboard() {
       commune: values.commune.trim(),
       address: values.address.trim(),
       product: values.product.trim(),
+      sku: values.sku.trim(),
       quantity: values.quantity,
       amount: values.amount,
       shipping_cost: preservedShip,

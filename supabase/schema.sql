@@ -9,6 +9,7 @@ create table if not exists public.orders (
   commune text not null default '',
   address text not null default '',
   product text not null,
+  sku text not null default '',
   quantity integer not null default 1 check (quantity >= 1),
   amount numeric(12, 2) not null check (amount >= 0),
   shipping_cost numeric(12, 2) not null default 0 check (shipping_cost >= 0),

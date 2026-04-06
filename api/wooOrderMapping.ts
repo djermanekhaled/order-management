@@ -18,6 +18,7 @@ export type WooOrderPayload = {
   };
   line_items?: Array<{
     name?: string;
+    sku?: string;
     quantity?: number;
     total?: string;
   }>;
@@ -52,13 +53,17 @@ function billingAddress(b: WooOrderPayload["billing"]): string {
 const INTERNAL_TRACK_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 function newInternalTrackingId(): string {
-  const y = new Date().getFullYear();
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const datePrefix = `${y}${m}${day}`;
   let suffix = "";
   for (let i = 0; i < 4; i++) {
     suffix +=
       INTERNAL_TRACK_ALPHABET[randomInt(INTERNAL_TRACK_ALPHABET.length)]!;
   }
-  return `ORD-${y}-${suffix}`;
+  return `ORD-${datePrefix}-${suffix}`;
 }
 
 export function mapWooStatus(
@@ -82,6 +87,7 @@ export function buildOrderRowFromWooCommerce(wc: WooOrderPayload, sourceName: st
 
   const item0 = wc.line_items?.[0];
   const product = item0?.name?.trim() || "WooCommerce item";
+  const sku = (item0?.sku ?? "").trim();
   const quantity =
     Number.isFinite(item0?.quantity) && (item0?.quantity ?? 0) > 0
       ? (item0?.quantity as number)
@@ -100,6 +106,7 @@ export function buildOrderRowFromWooCommerce(wc: WooOrderPayload, sourceName: st
     wilaya: (wc.billing?.state ?? "").trim(),
     commune: (wc.billing?.city ?? "").trim(),
     product,
+    sku,
     quantity,
     amount: productAmount,
     shipping_cost: shippingCost,
