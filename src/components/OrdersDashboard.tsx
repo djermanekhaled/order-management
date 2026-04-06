@@ -1581,6 +1581,41 @@ const NEW_ROW_STATUS_OPTIONS: { snap: OrderSnapshot; label: string }[] = [
   },
 ];
 
+function underProcessRowTransitionOptions(
+  current: OrderSnapshot
+): { key: string; snap: OrderSnapshot; label: string }[] {
+  const keyOfSnap = (s: OrderSnapshot) =>
+    `${s.status}__${s.sub_status ?? "none"}`;
+  const curKey = keyOfSnap(current);
+  const out: { key: string; snap: OrderSnapshot; label: string }[] = [];
+  for (const sub of UNDER_PROCESS_SUBS) {
+    const snap: OrderSnapshot = {
+      status: "under_process",
+      sub_status: sub,
+    };
+    const k = keyOfSnap(snap);
+    if (k === curKey) continue;
+    if (!isValidTransition(current, snap)) continue;
+    out.push({ key: k, snap, label: subStatusLabel(sub) });
+  }
+  const toNew: OrderSnapshot = { status: "new", sub_status: null };
+  if (isValidTransition(current, toNew)) {
+    out.push({ key: keyOfSnap(toNew), snap: toNew, label: "New" });
+  }
+  const toCancelled: OrderSnapshot = {
+    status: "cancelled",
+    sub_status: "cancelled",
+  };
+  if (isValidTransition(current, toCancelled)) {
+    out.push({
+      key: keyOfSnap(toCancelled),
+      snap: toCancelled,
+      label: "Cancelled",
+    });
+  }
+  return out;
+}
+
 function InlineOrderState({
   order,
   disabled,
@@ -1635,9 +1670,10 @@ function InlineOrderState({
 
   const isConfirmedMainRow = order.status === "confirmed";
   const isNewMainRow = order.status === "new";
+  const isUnderProcessMainRow = order.status === "under_process";
 
   const transitions =
-    isConfirmedMainRow || isNewMainRow
+    isConfirmedMainRow || isNewMainRow || isUnderProcessMainRow
     ? []
     : candidates
         .filter((c) => isValidTransition(current, c))
@@ -1682,6 +1718,17 @@ function InlineOrderState({
             {label}
           </option>
         ))
+      ) : isUnderProcessMainRow ? (
+        <>
+          <option value={currentKey}>
+            {subStatusLabel(current.sub_status)}
+          </option>
+          {underProcessRowTransitionOptions(current).map((row) => (
+            <option key={row.key} value={row.key}>
+              {row.label}
+            </option>
+          ))}
+        </>
       ) : isNewMainRow ? (
         <>
           <option value={currentKey}>{fullStatusLine(order)}</option>

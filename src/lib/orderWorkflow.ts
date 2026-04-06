@@ -127,6 +127,11 @@ export function isValidTransition(from: OrderSnapshot, to: OrderSnapshot): boole
     }
   }
 
+  // Under Process → New (back to New list).
+  if (from.status === "under_process" && to.status === "new" && to.sub_status === null) {
+    return true;
+  }
+
   if (from.status === to.status) {
     if (from.status === "under_process") {
       return (
