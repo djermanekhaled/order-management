@@ -4,7 +4,8 @@ import type { Order } from "../types/order";
 function orderGrandTotal(o: Order): number {
   const t = o.total_amount;
   if (t != null && Number.isFinite(Number(t))) return Number(t);
-  return Number(o.amount) + Number(o.shipping_cost ?? 0);
+  const disc = Number(o.discount ?? 0);
+  return Number(o.amount) + Number(o.shipping_cost ?? 0) - disc;
 }
 
 function escapeCell(value: string): string {
@@ -26,6 +27,7 @@ export function exportOrdersToCsv(orders: Order[], filenameBase = "orders"): voi
     "sku",
     "quantity",
     "amount",
+    "discount",
     "shipping_cost",
     "total_amount",
     "notes",
@@ -55,6 +57,7 @@ export function exportOrdersToCsv(orders: Order[], filenameBase = "orders"): voi
         o.sku ?? "",
         o.quantity,
         o.amount,
+        o.discount ?? 0,
         o.shipping_cost ?? 0,
         orderGrandTotal(o),
         o.notes,

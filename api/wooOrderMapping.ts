@@ -109,6 +109,7 @@ export function buildOrderRowFromWooCommerce(wc: WooOrderPayload, sourceName: st
     sku,
     quantity,
     amount: productAmount,
+    discount: 0,
     shipping_cost: shippingCost,
     total_amount: totalAmount,
     notes: wcId != null ? wooOrderNote(wcId) : "WooCommerce order",

@@ -14,6 +14,7 @@ import {
   UNDER_PROCESS_SUBS,
   isValidOrderState,
   isValidTransition,
+  statusLabel,
   subStatusLabel,
 } from "../lib/orderWorkflow";
 import { navKeyLabel, orderMatchesNavKey } from "../lib/sidebarNav";
@@ -52,7 +53,10 @@ function formatMoneyDzd(n: number) {
 function orderGrandTotal(o: Order): number {
   const t = o.total_amount;
   if (t != null && Number.isFinite(Number(t))) return Number(t);
-  return Number(o.amount) + Number(o.shipping_cost ?? 0);
+  const disc = Number(o.discount ?? 0);
+  return (
+    Number(o.amount) + Number(o.shipping_cost ?? 0) - disc
+  );
 }
 
 function formatDate(iso: string) {
@@ -346,6 +350,7 @@ export function OrdersDashboard() {
     }
 
     const shippingCost = Math.max(0, Number(values.shipping_cost) || 0);
+    const discount = Math.max(0, Number(values.discount) || 0);
 
     const payload = {
       customer_name: values.customer_name.trim(),
@@ -357,8 +362,9 @@ export function OrdersDashboard() {
       sku: values.sku.trim(),
       quantity: values.quantity,
       amount: values.amount,
+      discount,
       shipping_cost: shippingCost,
-      total_amount: values.amount + shippingCost,
+      total_amount: values.amount + shippingCost - discount,
       notes: values.notes.trim(),
       status: values.status,
       sub_status: values.sub_status,
@@ -1264,10 +1270,20 @@ export function OrdersDashboard() {
 
 function orderTableHeaderCell(id: OrderColumnId): ReactElement {
   const right = id === "actions";
+  const stickyStatus = id === "status";
+  const idCol = id === "internalTracking";
   return (
     <th
       key={id}
-      className={right ? "px-4 py-3 text-right font-medium" : "px-4 py-3 font-medium"}
+      className={[
+        right ? "px-4 py-3 text-right font-medium" : "px-4 py-3 font-medium",
+        idCol ? "min-w-[11rem] max-w-[14rem]" : "",
+        stickyStatus
+          ? "sticky left-[13rem] z-20 min-w-[12rem] border-r border-slate-800/80 bg-slate-900/98 py-3 backdrop-blur-sm"
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
     >
       {ORDER_COLUMN_LABELS[id]}
     </th>
@@ -1381,7 +1397,7 @@ function orderTableDataCell(
       return (
         <td
           key={id}
-          className="max-w-[140px] truncate px-4 py-3 font-mono text-xs text-slate-400"
+          className="min-w-[11rem] max-w-[14rem] truncate px-4 py-3 font-mono text-xs text-slate-400"
           title={o.internal_tracking_id || undefined}
         >
           {o.internal_tracking_id?.trim() ? o.internal_tracking_id : "—"}
@@ -1419,7 +1435,10 @@ function orderTableDataCell(
       );
     case "status":
       return (
-        <td key={id} className="px-4 py-3">
+        <td
+          key={id}
+          className="sticky left-[13rem] z-20 min-w-[12rem] border-r border-slate-800/80 bg-slate-900/95 px-4 py-3 align-top backdrop-blur-sm"
+        >
           <InlineOrderState
             order={o}
             disabled={ctx.savingStateId === o.id}
@@ -1441,8 +1460,10 @@ function orderTableDataCell(
               type="button"
               onClick={() => ctx.onEdit(o)}
               className="rounded-lg border border-slate-600 px-2 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
+              title="Edit"
+              aria-label="Edit order"
             >
-              Edit
+              ✏️
             </button>
             <button
               type="button"
@@ -1456,6 +1477,35 @@ function orderTableDataCell(
       );
     default:
       return <td key={id} />;
+  }
+}
+
+function fullStatusLine(order: Order): string {
+  if (order.status === "new") return "New";
+  const main = statusLabel(order.status);
+  if (order.sub_status == null) return main;
+  if (order.status === "confirmed" || order.status === "follow") {
+    return main;
+  }
+  return `${main} · ${subStatusLabel(order.sub_status)}`;
+}
+
+function statusBadgeClass(status: OrderStatus): string {
+  switch (status) {
+    case "new":
+      return "bg-blue-600/35 text-blue-100 ring-1 ring-blue-500/50";
+    case "under_process":
+      return "bg-orange-500/35 text-orange-100 ring-1 ring-orange-500/50";
+    case "confirmed":
+      return "bg-emerald-600/35 text-emerald-100 ring-1 ring-emerald-500/50";
+    case "follow":
+      return "bg-yellow-500/40 text-yellow-950 ring-1 ring-yellow-500/55";
+    case "completed":
+      return "bg-teal-600/35 text-teal-100 ring-1 ring-teal-500/50";
+    case "cancelled":
+      return "bg-rose-600/35 text-rose-100 ring-1 ring-rose-500/50";
+    default:
+      return "bg-slate-700 text-slate-200 ring-1 ring-slate-600";
   }
 }
 
@@ -1525,25 +1575,33 @@ function InlineOrderState({
   }));
 
   return (
-    <select
-      value={currentKey}
-      disabled={disabled}
-      onChange={(e) => {
-        const raw = e.target.value;
-        const [st, subRaw] = raw.split("__");
-        const next: OrderSnapshot = {
-          status: st as OrderStatus,
-          sub_status: subRaw === "none" ? null : (subRaw as OrderSubStatus),
-        };
-        onApply(next);
-      }}
-      className="w-full cursor-pointer rounded-lg border-0 bg-slate-800 px-2 py-1.5 text-xs font-medium text-slate-100 ring-1 ring-slate-600 outline-none focus:ring-2 focus:ring-indigo-500/50 disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      {options.map((o) => (
-        <option key={o.key} value={o.key}>
-          {o.label}
-        </option>
-      ))}
-    </select>
+    <div className="flex flex-col gap-2">
+      <span
+        className={`inline-flex w-fit max-w-full rounded-lg px-2.5 py-1.5 text-xs font-semibold leading-snug ${statusBadgeClass(order.status)}`}
+      >
+        {fullStatusLine(order)}
+      </span>
+      <select
+        value={currentKey}
+        disabled={disabled}
+        onChange={(e) => {
+          const raw = e.target.value;
+          const [st, subRaw] = raw.split("__");
+          const next: OrderSnapshot = {
+            status: st as OrderStatus,
+            sub_status: subRaw === "none" ? null : (subRaw as OrderSubStatus),
+          };
+          onApply(next);
+        }}
+        className="w-full min-w-0 cursor-pointer rounded-lg border-0 bg-slate-800 px-2 py-1.5 text-xs font-medium text-slate-100 ring-1 ring-slate-600 outline-none focus:ring-2 focus:ring-indigo-500/50 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <option value={currentKey}>{fullStatusLine(order)}</option>
+        {options.map((o) => (
+          <option key={o.key} value={o.key}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }

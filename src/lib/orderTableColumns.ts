@@ -1,5 +1,7 @@
 /** Orders table data columns (excluding the leading selection checkbox column). */
 export type OrderColumnId =
+  | "internalTracking"
+  | "status"
   | "customer"
   | "phone"
   | "wilaya"
@@ -12,15 +14,15 @@ export type OrderColumnId =
   | "total"
   | "deliveryType"
   | "delivery"
-  | "internalTracking"
   | "tracking"
   | "shipStatus"
   | "source"
-  | "status"
   | "created"
   | "actions";
 
 export const ORDER_COLUMN_IDS: OrderColumnId[] = [
+  "internalTracking",
+  "status",
   "customer",
   "phone",
   "wilaya",
@@ -33,16 +35,16 @@ export const ORDER_COLUMN_IDS: OrderColumnId[] = [
   "total",
   "deliveryType",
   "delivery",
-  "internalTracking",
   "tracking",
   "shipStatus",
   "source",
-  "status",
   "created",
   "actions",
 ];
 
 export const ORDER_COLUMN_LABELS: Record<OrderColumnId, string> = {
+  internalTracking: "ID",
+  status: "Status",
   customer: "Customer",
   phone: "Phone",
   wilaya: "Wilaya",
@@ -55,11 +57,9 @@ export const ORDER_COLUMN_LABELS: Record<OrderColumnId, string> = {
   total: "Total",
   deliveryType: "Delivery Type",
   delivery: "Delivery",
-  internalTracking: "Internal Tracking ID",
   tracking: "Tracking",
   shipStatus: "Ship status",
   source: "Source",
-  status: "Status",
   created: "Created",
   actions: "Actions",
 };

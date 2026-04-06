@@ -40,6 +40,8 @@ export interface Order {
   quantity: number;
   /** Product / line-items subtotal (excludes shipping). */
   amount: number;
+  /** Discount in DZD (subtracted before total). */
+  discount?: number;
   shipping_cost?: number;
   /** Final total including shipping (WooCommerce `total`). */
   total_amount?: number;
@@ -70,6 +72,7 @@ export interface OrderFormValues {
   sku: string;
   quantity: number;
   amount: number;
+  discount: number;
   /** Shipping fee in DZD (manual). */
   shipping_cost: number;
   notes: string;

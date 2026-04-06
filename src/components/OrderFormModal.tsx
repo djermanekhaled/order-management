@@ -33,6 +33,7 @@ const emptyForm: OrderFormValues = {
   quantity: 1,
   amount: 0,
   shipping_cost: 0,
+  discount: 0,
   notes: "",
   status: "new",
   sub_status: null,
@@ -62,7 +63,7 @@ export function OrderFormModal({
   const [saving, setSaving] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [catalogProducts, setCatalogProducts] = useState<
-    { id: string; name: string; sku: string }[]
+    { id: string; name: string; sku: string; sale_price: number }[]
   >([]);
   const [formDeliveryCompanies, setFormDeliveryCompanies] = useState<
     { id: string; name: string }[]
@@ -76,7 +77,7 @@ export function OrderFormModal({
     void Promise.all([
       supabase
         .from("products")
-        .select("id, name, sku")
+        .select("id, name, sku, sale_price")
         .eq("active", true)
         .order("name"),
       supabase
@@ -88,7 +89,14 @@ export function OrderFormModal({
       .then(([proRes, dcRes]) => {
         if (cancelled) return;
         if (!proRes.error && proRes.data) {
-          setCatalogProducts(proRes.data as { id: string; name: string; sku: string }[]);
+          setCatalogProducts(
+            proRes.data as {
+              id: string;
+              name: string;
+              sku: string;
+              sale_price: number;
+            }[]
+          );
         }
         if (!dcRes.error && dcRes.data) {
           setFormDeliveryCompanies(dcRes.data as { id: string; name: string }[]);
@@ -113,6 +121,7 @@ export function OrderFormModal({
             id: "__legacy_product__",
             name,
             sku: initialOrder.sku ?? "",
+            sale_price: Number(initialOrder.amount) || 0,
           },
         ];
       }
@@ -145,6 +154,7 @@ export function OrderFormModal({
         sku: initialOrder.sku ?? "",
         quantity: initialOrder.quantity ?? 1,
         amount: Number(initialOrder.amount),
+        discount: Number(initialOrder.discount ?? 0),
         shipping_cost: Number(initialOrder.shipping_cost ?? 0),
         notes: initialOrder.notes ?? "",
         status: initialOrder.status,
@@ -343,24 +353,6 @@ export function OrderFormModal({
             </div>
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-slate-300">
-                Internal Tracking ID
-              </label>
-              <input
-                readOnly
-                value={values.internal_tracking_id}
-                placeholder={
-                  mode === "create" ? "Assigned when you save" : undefined
-                }
-                className="mt-1 w-full cursor-default rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-slate-400 outline-none placeholder:text-slate-600"
-                title={
-                  mode === "create"
-                    ? "Generated on save (ORD-YYYYMMDD-XXXX)"
-                    : "Internal reference"
-                }
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-sm font-medium text-slate-300">
                 Address
               </label>
               <textarea
@@ -383,14 +375,22 @@ export function OrderFormModal({
                 onChange={(e) => {
                   const name = e.target.value;
                   if (!name) {
-                    setValues((v) => ({ ...v, product: "", sku: "" }));
+                    setValues((v) => ({
+                      ...v,
+                      product: "",
+                      sku: "",
+                      amount: 0,
+                    }));
                     return;
                   }
                   const p = productSelectOptions.find((x) => x.name === name);
+                  const price =
+                    p != null ? Number(p.sale_price) : 0;
                   setValues((v) => ({
                     ...v,
                     product: name,
                     sku: p?.sku ?? "",
+                    amount: Number.isFinite(price) && price >= 0 ? price : v.amount,
                   }));
                 }}
                 className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-60"
@@ -451,6 +451,24 @@ export function OrderFormModal({
                   setValues((v) => ({
                     ...v,
                     amount: parseFloat(e.target.value) || 0,
+                  }))
+                }
+                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300">
+                Discount (DZD)
+              </label>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={values.discount}
+                onChange={(e) =>
+                  setValues((v) => ({
+                    ...v,
+                    discount: Math.max(0, parseFloat(e.target.value) || 0),
                   }))
                 }
                 className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"

@@ -99,13 +99,13 @@ export function AppSidebar({
 
   const counts = useMemo(() => {
     const keys: SidebarNavKey[] = [
-      "all",
       "new",
       "under_process",
       "confirmed",
       "follow",
       "completed",
       "cancelled",
+      "all",
     ];
     const m = {} as Record<SidebarNavKey, number>;
     for (const k of keys) m[k] = countByNavKey(orders, k);
@@ -218,12 +218,6 @@ export function AppSidebar({
             {ordersOpen && (
               <div className="mt-1 space-y-0.5 border-t border-slate-800/60 pt-1">
                 <NavRow
-                  active={navKey === "all"}
-                  onClick={() => onNavKey("all")}
-                  label="All"
-                  count={counts.all}
-                />
-                <NavRow
                   active={navKey === "new"}
                   onClick={() => onNavKey("new")}
                   label="New"
@@ -258,6 +252,12 @@ export function AppSidebar({
                   onClick={() => onNavKey("cancelled")}
                   label={statusLabel("cancelled")}
                   count={counts.cancelled}
+                />
+                <NavRow
+                  active={navKey === "all"}
+                  onClick={() => onNavKey("all")}
+                  label="All"
+                  count={counts.all}
                 />
               </div>
             )}
