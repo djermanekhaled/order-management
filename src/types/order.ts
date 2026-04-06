@@ -9,7 +9,7 @@ export type OrderStatus =
 
 /**
  * Sub-status; `null` when not used for that main status.
- * - under_process: call_1 | call_2 | call_3 | postponed
+ * - under_process: call_1 | call_2 | call_3 | busy | postponed
  * - completed: delivered | returned
  * - cancelled: cancelled | fake_order | duplicated
  */
@@ -19,6 +19,7 @@ export type OrderSubStatus =
   | "call_1"
   | "call_2"
   | "call_3"
+  | "busy"
   | "postponed"
   | "confirmed"
   | "delivered"

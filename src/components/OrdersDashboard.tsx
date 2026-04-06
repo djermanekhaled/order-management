@@ -1564,6 +1564,23 @@ const CONFIRMED_ROW_STATUS_OPTIONS: {
   },
 ];
 
+/** Inline status choices when the row is New (sidebar “New”). */
+const NEW_ROW_STATUS_OPTIONS: { snap: OrderSnapshot; label: string }[] = [
+  { snap: { status: "under_process", sub_status: "call_1" }, label: "Call 1" },
+  { snap: { status: "under_process", sub_status: "call_2" }, label: "Call 2" },
+  { snap: { status: "under_process", sub_status: "call_3" }, label: "Call 3" },
+  { snap: { status: "under_process", sub_status: "busy" }, label: "Busy" },
+  {
+    snap: { status: "under_process", sub_status: "postponed" },
+    label: "Postponed",
+  },
+  { snap: { status: "cancelled", sub_status: "cancelled" }, label: "Cancelled" },
+  {
+    snap: { status: "confirmed", sub_status: "confirmed" },
+    label: "Confirmed",
+  },
+];
+
 function InlineOrderState({
   order,
   disabled,
@@ -1617,8 +1634,10 @@ function InlineOrderState({
   const currentKey = keyOf(current);
 
   const isConfirmedMainRow = order.status === "confirmed";
+  const isNewMainRow = order.status === "new";
 
-  const transitions = isConfirmedMainRow
+  const transitions =
+    isConfirmedMainRow || isNewMainRow
     ? []
     : candidates
         .filter((c) => isValidTransition(current, c))
@@ -1657,22 +1676,31 @@ function InlineOrderState({
         backgroundSize: "0.65rem",
       }}
     >
-      {isConfirmedMainRow
-        ? CONFIRMED_ROW_STATUS_OPTIONS.map(({ snap, label }) => (
+      {isConfirmedMainRow ? (
+        CONFIRMED_ROW_STATUS_OPTIONS.map(({ snap, label }) => (
+          <option key={keyOf(snap)} value={keyOf(snap)}>
+            {label}
+          </option>
+        ))
+      ) : isNewMainRow ? (
+        <>
+          <option value={currentKey}>{fullStatusLine(order)}</option>
+          {NEW_ROW_STATUS_OPTIONS.map(({ snap, label }) => (
             <option key={keyOf(snap)} value={keyOf(snap)}>
               {label}
             </option>
-          ))
-        : (
-            <>
-              <option value={currentKey}>{fullStatusLine(order)}</option>
-              {transitions.map((t) => (
-                <option key={t.key} value={t.key}>
-                  {fullStatusLine(t.snap)}
-                </option>
-              ))}
-            </>
-          )}
+          ))}
+        </>
+      ) : (
+        <>
+          <option value={currentKey}>{fullStatusLine(order)}</option>
+          {transitions.map((t) => (
+            <option key={t.key} value={t.key}>
+              {fullStatusLine(t.snap)}
+            </option>
+          ))}
+        </>
+      )}
     </select>
   );
 }

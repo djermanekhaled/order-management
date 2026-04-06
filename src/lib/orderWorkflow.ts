@@ -17,6 +17,7 @@ export const UNDER_PROCESS_SUBS: OrderSubStatus[] = [
   "call_1",
   "call_2",
   "call_3",
+  "busy",
   "postponed",
 ];
 
@@ -46,6 +47,7 @@ export function subStatusLabel(sub: OrderSubStatus | null): string {
     call_1: "Call 1",
     call_2: "Call 2",
     call_3: "Call 3",
+    busy: "Busy",
     postponed: "Postponed",
     confirmed: "Confirmed",
     delivered: "Delivered",
