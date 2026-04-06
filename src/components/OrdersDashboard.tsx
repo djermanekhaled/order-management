@@ -66,11 +66,12 @@ function formatDate(iso: string) {
   }).format(new Date(iso));
 }
 
-function deliveryTypeTableLabel(
-  t: string | null | undefined
-): string {
-  if (t === "pickup-point") return "Stop desk";
-  return "À domicile";
+function deliveryTypeIconAndTooltip(t: string | null | undefined): {
+  icon: string;
+  label: string;
+} {
+  if (t === "pickup-point") return { icon: "🏢", label: "Stop desk" };
+  return { icon: "🏠", label: "À domicile" };
 }
 
 function localDayBounds(fromStr: string | "", toStr: string | "") {
@@ -1380,12 +1381,21 @@ function orderTableDataCell(
           {formatMoneyDzd(orderGrandTotal(o))}
         </td>
       );
-    case "deliveryType":
+    case "deliveryType": {
+      const { icon, label } = deliveryTypeIconAndTooltip(o.delivery_type);
       return (
-        <td key={id} className="px-4 py-3 text-slate-400">
-          {deliveryTypeTableLabel(o.delivery_type)}
+        <td key={id} className="px-4 py-3 text-slate-200">
+          <span
+            className="inline-flex cursor-default select-none text-base leading-none"
+            title={label}
+            aria-label={label}
+            role="img"
+          >
+            {icon}
+          </span>
         </td>
       );
+    }
     case "delivery":
       return (
         <td
