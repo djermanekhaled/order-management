@@ -1254,15 +1254,15 @@ export function OrdersDashboard() {
 }
 
 /**
- * Right sticky cluster (DOM … | actions | created | status).
- * Status is flush to the table’s right edge; created sits left of it with no gap.
+ * Right sticky cluster (DOM … | created | status | actions).
+ * Actions flush right; then status, then created.
  */
-const STICKY_RIGHT_STATUS =
-  "sticky right-0 z-30 w-[9rem] min-w-[9rem] max-w-[9rem] shrink-0";
-const STICKY_RIGHT_CREATED =
-  "sticky right-[9rem] z-25 w-[11rem] min-w-[11rem] max-w-[11rem] shrink-0";
 const STICKY_RIGHT_ACTIONS =
-  "sticky right-[20rem] z-20 w-[7rem] min-w-[7rem]";
+  "sticky right-0 z-30 w-[7rem] min-w-[7rem]";
+const STICKY_RIGHT_STATUS =
+  "sticky right-[7rem] z-25 w-[9rem] min-w-[9rem] max-w-[9rem] shrink-0";
+const STICKY_RIGHT_CREATED =
+  "sticky right-[16rem] z-20 w-[11rem] min-w-[11rem] max-w-[11rem] shrink-0";
 
 function orderTableHeaderCell(id: OrderColumnId): ReactElement {
   const stickyActions = id === "actions";
