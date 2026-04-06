@@ -31,6 +31,7 @@ const emptyForm: OrderFormValues = {
   sku: "",
   quantity: 1,
   amount: 0,
+  shipping_cost: 0,
   notes: "",
   status: "new",
   sub_status: null,
@@ -74,6 +75,7 @@ export function OrderFormModal({
         sku: initialOrder.sku ?? "",
         quantity: initialOrder.quantity ?? 1,
         amount: Number(initialOrder.amount),
+        shipping_cost: Number(initialOrder.shipping_cost ?? 0),
         notes: initialOrder.notes ?? "",
         status: initialOrder.status,
         sub_status:
@@ -359,6 +361,27 @@ export function OrderFormModal({
                   setValues((v) => ({
                     ...v,
                     amount: parseFloat(e.target.value) || 0,
+                  }))
+                }
+                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-slate-300">
+                Shipping price (DZD)
+              </label>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={values.shipping_cost}
+                onChange={(e) =>
+                  setValues((v) => ({
+                    ...v,
+                    shipping_cost: Math.max(
+                      0,
+                      parseFloat(e.target.value) || 0
+                    ),
                   }))
                 }
                 className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"

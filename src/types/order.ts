@@ -70,6 +70,8 @@ export interface OrderFormValues {
   sku: string;
   quantity: number;
   amount: number;
+  /** Shipping fee in DZD (manual). */
+  shipping_cost: number;
   notes: string;
   status: OrderStatus;
   sub_status: OrderSubStatus | null;

@@ -260,10 +260,7 @@ export function OrdersDashboard() {
       throw new Error("Invalid status / sub-status transition.");
     }
 
-    const preservedShip =
-      formMode === "edit" && editingOrder
-        ? Number(editingOrder.shipping_cost ?? 0)
-        : 0;
+    const shippingCost = Math.max(0, Number(values.shipping_cost) || 0);
 
     const payload = {
       customer_name: values.customer_name.trim(),
@@ -275,8 +272,8 @@ export function OrdersDashboard() {
       sku: values.sku.trim(),
       quantity: values.quantity,
       amount: values.amount,
-      shipping_cost: preservedShip,
-      total_amount: values.amount + preservedShip,
+      shipping_cost: shippingCost,
+      total_amount: values.amount + shippingCost,
       notes: values.notes.trim(),
       status: values.status,
       sub_status: values.sub_status,
