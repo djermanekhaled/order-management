@@ -1192,7 +1192,7 @@ export function OrdersDashboard() {
             <table className="w-full min-w-[1780px] text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-800/80 text-xs uppercase tracking-wider text-slate-500">
-                  <th className="w-10 px-2 py-3 font-medium">
+                  <th className="sticky left-0 z-30 w-10 bg-slate-900/98 px-2 py-3 font-medium backdrop-blur-sm">
                     <input
                       type="checkbox"
                       checked={allFilteredSelected}
@@ -1212,8 +1212,8 @@ export function OrdersDashboard() {
               <tbody className="divide-y divide-slate-800/60">
                 {!loading &&
                   filteredOrders.map((o) => (
-                    <tr key={o.id} className="hover:bg-slate-800/20">
-                      <td className="px-2 py-3">
+                    <tr key={o.id} className="group hover:bg-slate-800/20">
+                      <td className="sticky left-0 z-30 bg-slate-900/95 px-2 py-3 backdrop-blur-sm group-hover:bg-slate-800/25">
                         <input
                           type="checkbox"
                           checked={selectedOrderIds.has(o.id)}
@@ -1269,18 +1269,21 @@ export function OrdersDashboard() {
 }
 
 function orderTableHeaderCell(id: OrderColumnId): ReactElement {
-  const right = id === "actions";
+  const stickyActions = id === "actions";
   const stickyStatus = id === "status";
   const idCol = id === "internalTracking";
   return (
     <th
       key={id}
       className={[
-        right ? "px-4 py-3 text-right font-medium" : "px-4 py-3 font-medium",
-        idCol ? "min-w-[11rem] max-w-[14rem]" : "",
-        stickyStatus
-          ? "sticky left-[13rem] z-20 min-w-[12rem] border-r border-slate-800/80 bg-slate-900/98 py-3 backdrop-blur-sm"
+        stickyActions
+          ? "sticky left-10 z-20 w-[7rem] min-w-[7rem] border-r border-slate-800/80 bg-slate-900/98 px-4 py-3 font-medium backdrop-blur-sm"
           : "",
+        stickyStatus
+          ? "sticky left-[9.5rem] z-20 min-w-[12rem] border-r border-slate-800/80 bg-slate-900/98 px-4 py-3 font-medium backdrop-blur-sm"
+          : "",
+        !stickyActions && !stickyStatus ? "px-4 py-3 font-medium" : "",
+        idCol ? "min-w-[11rem] max-w-[14rem]" : "",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -1437,7 +1440,7 @@ function orderTableDataCell(
       return (
         <td
           key={id}
-          className="sticky left-[13rem] z-20 min-w-[12rem] border-r border-slate-800/80 bg-slate-900/95 px-4 py-3 align-top backdrop-blur-sm"
+          className="sticky left-[9.5rem] z-20 min-w-[12rem] border-r border-slate-800/80 bg-slate-900/95 px-4 py-3 align-top backdrop-blur-sm group-hover:bg-slate-800/25"
         >
           <InlineOrderState
             order={o}
@@ -1454,8 +1457,11 @@ function orderTableDataCell(
       );
     case "actions":
       return (
-        <td key={id} className="px-4 py-3 text-right">
-          <div className="flex justify-end gap-2">
+        <td
+          key={id}
+          className="sticky left-10 z-20 w-[7rem] min-w-[7rem] border-r border-slate-800/80 bg-slate-900/95 px-3 py-3 backdrop-blur-sm group-hover:bg-slate-800/25"
+        >
+          <div className="flex justify-start gap-1.5">
             <button
               type="button"
               onClick={() => ctx.onEdit(o)}
@@ -1468,9 +1474,11 @@ function orderTableDataCell(
             <button
               type="button"
               onClick={() => ctx.onHistory(o)}
-              className="rounded-lg border border-indigo-600/40 px-2 py-1 text-xs font-medium text-indigo-200 hover:bg-indigo-950/50"
+              className="rounded-lg border border-indigo-600/40 px-2 py-1 text-sm leading-none text-indigo-200 hover:bg-indigo-950/50"
+              title="History"
+              aria-label="Order history"
             >
-              History
+              🕐
             </button>
           </div>
         </td>
@@ -1480,14 +1488,14 @@ function orderTableDataCell(
   }
 }
 
-function fullStatusLine(order: Order): string {
-  if (order.status === "new") return "New";
-  const main = statusLabel(order.status);
-  if (order.sub_status == null) return main;
-  if (order.status === "confirmed" || order.status === "follow") {
+function fullStatusLine(o: Pick<Order, "status" | "sub_status">): string {
+  if (o.status === "new") return "New";
+  const main = statusLabel(o.status);
+  if (o.sub_status == null) return main;
+  if (o.status === "confirmed" || o.status === "follow") {
     return main;
   }
-  return `${main} · ${subStatusLabel(order.sub_status)}`;
+  return `${main} · ${subStatusLabel(o.sub_status)}`;
 }
 
 function statusBadgeClass(status: OrderStatus): string {
@@ -1539,11 +1547,6 @@ function InlineOrderState({
     return `${s.status}__${s.sub_status ?? "none"}`;
   }
 
-  function labelOf(s: OrderSnapshot): string {
-    if (s.status === "new") return "New";
-    return subStatusLabel(s.sub_status);
-  }
-
   const current = normalizeSnap(order);
 
   const candidates: OrderSnapshot[] = [
@@ -1570,38 +1573,39 @@ function InlineOrderState({
   const options = allowed
     .filter((s) => keyOf(s) !== currentKey)
     .map((s) => ({
-    key: keyOf(s),
-    label: labelOf(s),
-  }));
+      key: keyOf(s),
+      label: fullStatusLine(s),
+    }));
 
   return (
-    <div className="flex flex-col gap-2">
-      <span
-        className={`inline-flex w-fit max-w-full rounded-lg px-2.5 py-1.5 text-xs font-semibold leading-snug ${statusBadgeClass(order.status)}`}
-      >
-        {fullStatusLine(order)}
-      </span>
-      <select
-        value={currentKey}
-        disabled={disabled}
-        onChange={(e) => {
-          const raw = e.target.value;
-          const [st, subRaw] = raw.split("__");
-          const next: OrderSnapshot = {
-            status: st as OrderStatus,
-            sub_status: subRaw === "none" ? null : (subRaw as OrderSubStatus),
-          };
-          onApply(next);
-        }}
-        className="w-full min-w-0 cursor-pointer rounded-lg border-0 bg-slate-800 px-2 py-1.5 text-xs font-medium text-slate-100 ring-1 ring-slate-600 outline-none focus:ring-2 focus:ring-indigo-500/50 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        <option value={currentKey}>{fullStatusLine(order)}</option>
-        {options.map((o) => (
-          <option key={o.key} value={o.key}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </div>
+    <select
+      value={currentKey}
+      disabled={disabled}
+      title="Change status"
+      aria-label="Change order status"
+      onChange={(e) => {
+        const raw = e.target.value;
+        const [st, subRaw] = raw.split("__");
+        const next: OrderSnapshot = {
+          status: st as OrderStatus,
+          sub_status: subRaw === "none" ? null : (subRaw as OrderSubStatus),
+        };
+        onApply(next);
+      }}
+      className={`w-full max-w-[min(100%,14rem)] cursor-pointer appearance-none rounded-lg border-0 px-2.5 py-1.5 pr-7 text-left text-xs font-semibold leading-snug outline-none ring-1 focus:ring-2 focus:ring-indigo-500/60 disabled:cursor-not-allowed disabled:opacity-50 ${statusBadgeClass(order.status)}`}
+      style={{
+        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`,
+        backgroundRepeat: "no-repeat",
+        backgroundPosition: "right 0.45rem center",
+        backgroundSize: "0.65rem",
+      }}
+    >
+      <option value={currentKey}>{fullStatusLine(order)}</option>
+      {options.map((opt) => (
+        <option key={opt.key} value={opt.key}>
+          {opt.label}
+        </option>
+      ))}
+    </select>
   );
 }
