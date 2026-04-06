@@ -1,5 +1,6 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { WILAYAS } from "../constants/wilayas";
+import { supabase } from "../lib/supabase";
 import {
   allowedNextStatuses,
   CREATE_STATUS_OPTIONS,
@@ -60,6 +61,75 @@ export function OrderFormModal({
   const [values, setValues] = useState<OrderFormValues>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [catalogProducts, setCatalogProducts] = useState<
+    { id: string; name: string; sku: string }[]
+  >([]);
+  const [formDeliveryCompanies, setFormDeliveryCompanies] = useState<
+    { id: string; name: string }[]
+  >([]);
+  const [picklistsLoading, setPicklistsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setPicklistsLoading(true);
+    void Promise.all([
+      supabase
+        .from("products")
+        .select("id, name, sku")
+        .eq("active", true)
+        .order("name"),
+      supabase
+        .from("delivery_companies")
+        .select("id, name")
+        .eq("active", true)
+        .order("name"),
+    ])
+      .then(([proRes, dcRes]) => {
+        if (cancelled) return;
+        if (!proRes.error && proRes.data) {
+          setCatalogProducts(proRes.data as { id: string; name: string; sku: string }[]);
+        }
+        if (!dcRes.error && dcRes.data) {
+          setFormDeliveryCompanies(dcRes.data as { id: string; name: string }[]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setPicklistsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  const productSelectOptions = useMemo(() => {
+    const base = catalogProducts;
+    if (mode === "edit" && initialOrder?.product?.trim()) {
+      const name = initialOrder.product.trim();
+      if (!base.some((p) => p.name === name)) {
+        return [
+          ...base,
+          {
+            id: "__legacy_product__",
+            name,
+            sku: initialOrder.sku ?? "",
+          },
+        ];
+      }
+    }
+    return base;
+  }, [catalogProducts, mode, initialOrder]);
+
+  const deliveryCompanySelectOptions = useMemo(() => {
+    const base = formDeliveryCompanies;
+    if (mode === "edit" && initialOrder?.delivery_company?.trim()) {
+      const name = initialOrder.delivery_company.trim();
+      if (!base.some((c) => c.name === name)) {
+        return [...base, { id: "__legacy_dc__", name }];
+      }
+    }
+    return base;
+  }, [formDeliveryCompanies, mode, initialOrder]);
 
   useEffect(() => {
     if (!open) return;
@@ -306,14 +376,34 @@ export function OrderFormModal({
               <label className="block text-sm font-medium text-slate-300">
                 Product
               </label>
-              <input
+              <select
                 required
                 value={values.product}
-                onChange={(e) =>
-                  setValues((v) => ({ ...v, product: e.target.value }))
-                }
-                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"
-              />
+                disabled={picklistsLoading}
+                onChange={(e) => {
+                  const name = e.target.value;
+                  if (!name) {
+                    setValues((v) => ({ ...v, product: "", sku: "" }));
+                    return;
+                  }
+                  const p = productSelectOptions.find((x) => x.name === name);
+                  setValues((v) => ({
+                    ...v,
+                    product: name,
+                    sku: p?.sku ?? "",
+                  }));
+                }}
+                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <option value="">
+                  {picklistsLoading ? "Loading products…" : "Select product…"}
+                </option>
+                {productSelectOptions.map((p) => (
+                  <option key={p.id} value={p.name}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-slate-300">
@@ -391,14 +481,26 @@ export function OrderFormModal({
               <label className="block text-sm font-medium text-slate-300">
                 Delivery company
               </label>
-              <input
+              <select
                 value={values.delivery_company}
+                disabled={picklistsLoading}
                 onChange={(e) =>
-                  setValues((v) => ({ ...v, delivery_company: e.target.value }))
+                  setValues((v) => ({
+                    ...v,
+                    delivery_company: e.target.value,
+                  }))
                 }
-                placeholder="e.g. Yalidine, Colis Privé…"
-                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"
-              />
+                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <option value="">
+                  {picklistsLoading ? "Loading…" : "— None —"}
+                </option>
+                {deliveryCompanySelectOptions.map((c) => (
+                  <option key={c.id} value={c.name}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-slate-300">
