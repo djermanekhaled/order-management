@@ -21,8 +21,6 @@ export type OrderColumnId =
   | "actions";
 
 export const ORDER_COLUMN_IDS: OrderColumnId[] = [
-  "actions",
-  "status",
   "internalTracking",
   "customer",
   "phone",
@@ -40,6 +38,8 @@ export const ORDER_COLUMN_IDS: OrderColumnId[] = [
   "shipStatus",
   "source",
   "created",
+  "status",
+  "actions",
 ];
 
 export const ORDER_COLUMN_LABELS: Record<OrderColumnId, string> = {

@@ -5,6 +5,7 @@ import {
   useState,
   type ReactElement,
 } from "react";
+import { Building2, Home } from "lucide-react";
 import { WILAYAS, WILAYA_FILTER_ALL } from "../constants/wilayas";
 import { MANUAL_ORDER_SOURCE } from "../constants/source";
 import { exportOrdersToCsv } from "../lib/csv";
@@ -64,14 +65,6 @@ function formatDate(iso: string) {
     dateStyle: "short",
     timeStyle: "short",
   }).format(new Date(iso));
-}
-
-function deliveryTypeIconAndTooltip(t: string | null | undefined): {
-  icon: string;
-  label: string;
-} {
-  if (t === "pickup-point") return { icon: "🏢", label: "Stop desk" };
-  return { icon: "🏠", label: "À domicile" };
 }
 
 function localDayBounds(fromStr: string | "", toStr: string | "") {
@@ -1269,21 +1262,32 @@ export function OrdersDashboard() {
   );
 }
 
+/** Right sticky cluster: actions 7rem + status 12rem → created offset 19rem. */
+const STICKY_RIGHT_ACTIONS = "sticky right-0 z-30 w-[7rem] min-w-[7rem]";
+const STICKY_RIGHT_STATUS =
+  "sticky right-[7rem] z-25 w-[12rem] min-w-[12rem] max-w-[12rem]";
+const STICKY_RIGHT_CREATED =
+  "sticky right-[19rem] z-20 min-w-[10rem] max-w-[11rem]";
+
 function orderTableHeaderCell(id: OrderColumnId): ReactElement {
   const stickyActions = id === "actions";
   const stickyStatus = id === "status";
+  const stickyCreated = id === "created";
   const idCol = id === "internalTracking";
+  const stickyRight =
+    stickyActions || stickyStatus || stickyCreated
+      ? "border-l border-slate-800/80 bg-slate-900/98 backdrop-blur-sm"
+      : "";
   return (
     <th
       key={id}
       className={[
-        stickyActions
-          ? "sticky left-10 z-20 w-[7rem] min-w-[7rem] border-r border-slate-800/80 bg-slate-900/98 px-4 py-3 font-medium backdrop-blur-sm"
+        stickyActions ? `${STICKY_RIGHT_ACTIONS} px-3 py-3 font-medium ${stickyRight}` : "",
+        stickyStatus ? `${STICKY_RIGHT_STATUS} px-4 py-3 font-medium ${stickyRight}` : "",
+        stickyCreated ? `${STICKY_RIGHT_CREATED} px-4 py-3 font-medium ${stickyRight}` : "",
+        !stickyActions && !stickyStatus && !stickyCreated
+          ? "px-4 py-3 font-medium"
           : "",
-        stickyStatus
-          ? "sticky left-[9.5rem] z-20 min-w-[12rem] border-r border-slate-800/80 bg-slate-900/98 px-4 py-3 font-medium backdrop-blur-sm"
-          : "",
-        !stickyActions && !stickyStatus ? "px-4 py-3 font-medium" : "",
         idCol ? "min-w-[11rem] max-w-[14rem]" : "",
       ]
         .filter(Boolean)
@@ -1382,16 +1386,22 @@ function orderTableDataCell(
         </td>
       );
     case "deliveryType": {
-      const { icon, label } = deliveryTypeIconAndTooltip(o.delivery_type);
+      const isPickup = o.delivery_type === "pickup-point";
+      const label = isPickup ? "Stop desk" : "À domicile";
+      const Icon = isPickup ? Building2 : Home;
       return (
-        <td key={id} className="px-4 py-3 text-slate-200">
+        <td key={id} className="px-4 py-3 text-slate-100">
           <span
-            className="inline-flex cursor-default select-none text-base leading-none"
+            className="inline-flex cursor-default items-center justify-center"
             title={label}
             aria-label={label}
             role="img"
           >
-            {icon}
+            <Icon
+              className="h-5 w-5 text-slate-100"
+              strokeWidth={1.75}
+              aria-hidden
+            />
           </span>
         </td>
       );
@@ -1446,11 +1456,20 @@ function orderTableDataCell(
           {o.source ?? "Manual"}
         </td>
       );
+    case "created":
+      return (
+        <td
+          key={id}
+          className={`${STICKY_RIGHT_CREATED} border-l border-slate-800/80 bg-slate-900/95 px-4 py-3 text-slate-500 backdrop-blur-sm group-hover:bg-slate-800/25`}
+        >
+          {formatDate(o.created_at)}
+        </td>
+      );
     case "status":
       return (
         <td
           key={id}
-          className="sticky left-[9.5rem] z-20 min-w-[12rem] border-r border-slate-800/80 bg-slate-900/95 px-4 py-3 align-top backdrop-blur-sm group-hover:bg-slate-800/25"
+          className={`${STICKY_RIGHT_STATUS} border-l border-slate-800/80 bg-slate-900/95 px-4 py-3 align-top backdrop-blur-sm group-hover:bg-slate-800/25`}
         >
           <InlineOrderState
             order={o}
@@ -1459,17 +1478,11 @@ function orderTableDataCell(
           />
         </td>
       );
-    case "created":
-      return (
-        <td key={id} className="px-4 py-3 text-slate-500">
-          {formatDate(o.created_at)}
-        </td>
-      );
     case "actions":
       return (
         <td
           key={id}
-          className="sticky left-10 z-20 w-[7rem] min-w-[7rem] border-r border-slate-800/80 bg-slate-900/95 px-3 py-3 backdrop-blur-sm group-hover:bg-slate-800/25"
+          className={`${STICKY_RIGHT_ACTIONS} border-l border-slate-800/80 bg-slate-900/95 px-3 py-3 backdrop-blur-sm group-hover:bg-slate-800/25`}
         >
           <div className="flex justify-start gap-1.5">
             <button
@@ -1511,19 +1524,19 @@ function fullStatusLine(o: Pick<Order, "status" | "sub_status">): string {
 function statusBadgeClass(status: OrderStatus): string {
   switch (status) {
     case "new":
-      return "bg-blue-600/35 text-blue-100 ring-1 ring-blue-500/50";
+      return "bg-blue-600 text-white";
     case "under_process":
-      return "bg-orange-500/35 text-orange-100 ring-1 ring-orange-500/50";
+      return "bg-orange-500 text-white";
     case "confirmed":
-      return "bg-emerald-600/35 text-emerald-100 ring-1 ring-emerald-500/50";
+      return "bg-emerald-600 text-white";
     case "follow":
-      return "bg-yellow-500/40 text-yellow-950 ring-1 ring-yellow-500/55";
+      return "bg-yellow-400 text-slate-900";
     case "completed":
-      return "bg-teal-600/35 text-teal-100 ring-1 ring-teal-500/50";
+      return "bg-teal-600 text-white";
     case "cancelled":
-      return "bg-rose-600/35 text-rose-100 ring-1 ring-rose-500/50";
+      return "bg-red-600 text-white";
     default:
-      return "bg-slate-700 text-slate-200 ring-1 ring-slate-600";
+      return "bg-slate-700 text-slate-100";
   }
 }
 
@@ -1580,12 +1593,23 @@ function InlineOrderState({
   const currentKey = keyOf(current);
 
   const allowed = candidates.filter((c) => isValidTransition(current, c));
-  const options = allowed
+  const transitions = allowed
     .filter((s) => keyOf(s) !== currentKey)
-    .map((s) => ({
-      key: keyOf(s),
-      label: fullStatusLine(s),
-    }));
+    .map((s) => ({ key: keyOf(s), snap: s }));
+
+  const transitionRest = transitions.filter(
+    (t) =>
+      t.snap.status !== "under_process" && t.snap.status !== "cancelled"
+  );
+  const transitionUnderProcess = transitions.filter(
+    (t) => t.snap.status === "under_process"
+  );
+  const transitionCancelled = transitions.filter(
+    (t) => t.snap.status === "cancelled"
+  );
+
+  const chevronStroke =
+    order.status === "follow" ? "%231e293b" : "%23ffffff";
 
   return (
     <select
@@ -1602,20 +1626,38 @@ function InlineOrderState({
         };
         onApply(next);
       }}
-      className={`w-full max-w-[min(100%,14rem)] cursor-pointer appearance-none rounded-lg border-0 px-2.5 py-1.5 pr-7 text-left text-xs font-semibold leading-snug outline-none ring-1 focus:ring-2 focus:ring-indigo-500/60 disabled:cursor-not-allowed disabled:opacity-50 ${statusBadgeClass(order.status)}`}
+      className={`w-full max-w-[min(100%,14rem)] cursor-pointer appearance-none rounded-lg border-0 px-2.5 py-1.5 pr-7 text-left text-xs font-semibold leading-snug outline-none shadow-sm focus:ring-2 focus:ring-white/40 disabled:cursor-not-allowed disabled:opacity-50 ${statusBadgeClass(order.status)}`}
       style={{
-        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`,
+        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='${chevronStroke}'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`,
         backgroundRepeat: "no-repeat",
         backgroundPosition: "right 0.45rem center",
         backgroundSize: "0.65rem",
       }}
     >
       <option value={currentKey}>{fullStatusLine(order)}</option>
-      {options.map((opt) => (
-        <option key={opt.key} value={opt.key}>
-          {opt.label}
+      {transitionRest.map((t) => (
+        <option key={t.key} value={t.key}>
+          {fullStatusLine(t.snap)}
         </option>
       ))}
+      {transitionUnderProcess.length > 0 && (
+        <optgroup label="Under Process">
+          {transitionUnderProcess.map((t) => (
+            <option key={t.key} value={t.key}>
+              {subStatusLabel(t.snap.sub_status)}
+            </option>
+          ))}
+        </optgroup>
+      )}
+      {transitionCancelled.length > 0 && (
+        <optgroup label="Cancelled">
+          {transitionCancelled.map((t) => (
+            <option key={t.key} value={t.key}>
+              {subStatusLabel(t.snap.sub_status)}
+            </option>
+          ))}
+        </optgroup>
+      )}
     </select>
   );
 }
