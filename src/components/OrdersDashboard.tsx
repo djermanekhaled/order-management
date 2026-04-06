@@ -1460,7 +1460,11 @@ function orderTableDataCell(
       return (
         <td
           key={id}
-          className={`${STICKY_RIGHT_STATUS} border-l border-slate-800/80 bg-slate-900/95 px-2 py-3 align-top backdrop-blur-sm group-hover:bg-slate-800/25`}
+          className={`${STICKY_RIGHT_STATUS} border-l border-slate-800/80 bg-slate-900/95 py-3 align-top backdrop-blur-sm group-hover:bg-slate-800/25 ${
+            o.status === "confirmed"
+              ? "overflow-hidden pl-2 pr-3"
+              : "px-2"
+          }`}
         >
           <InlineOrderState
             order={o}
@@ -1531,6 +1535,26 @@ function statusBadgeClass(status: OrderStatus): string {
   }
 }
 
+/** Inline status choices when the row is main status Confirmed (sidebar “Confirmed”). */
+const CONFIRMED_ROW_STATUS_OPTIONS: {
+  snap: OrderSnapshot;
+  label: string;
+}[] = [
+  { snap: { status: "new", sub_status: null }, label: "New" },
+  {
+    snap: { status: "under_process", sub_status: "postponed" },
+    label: "Postponed",
+  },
+  {
+    snap: { status: "cancelled", sub_status: "cancelled" },
+    label: "Cancelled",
+  },
+  {
+    snap: { status: "confirmed", sub_status: "confirmed" },
+    label: "Confirmed",
+  },
+];
+
 function InlineOrderState({
   order,
   disabled,
@@ -1583,16 +1607,25 @@ function InlineOrderState({
 
   const currentKey = keyOf(current);
 
-  const allowed = candidates.filter((c) => isValidTransition(current, c));
-  const transitions = allowed
-    .filter((s) => keyOf(s) !== currentKey)
-    .filter(
-      (s) => s.status !== "under_process" && s.status !== "cancelled"
-    )
-    .map((s) => ({ key: keyOf(s), snap: s }));
+  const isConfirmedMainRow = order.status === "confirmed";
+
+  const transitions = isConfirmedMainRow
+    ? []
+    : candidates
+        .filter((c) => isValidTransition(current, c))
+        .filter((s) => keyOf(s) !== currentKey)
+        .filter(
+          (s) => s.status !== "under_process" && s.status !== "cancelled"
+        )
+        .map((s) => ({ key: keyOf(s), snap: s }));
 
   const chevronStroke =
     order.status === "follow" ? "%231e293b" : "%23ffffff";
+
+  const selectClassConfirmed =
+    "box-border w-full min-w-0 max-w-full cursor-pointer appearance-none rounded-lg border-0 px-2 py-1.5 pr-6 text-left text-[11px] font-semibold leading-tight outline-none shadow-sm focus:ring-2 focus:ring-white/40 disabled:cursor-not-allowed disabled:opacity-50";
+  const selectClassDefault =
+    "box-border w-max min-w-0 max-w-[9rem] cursor-pointer appearance-none rounded-lg border-0 px-2 py-1.5 pr-6 text-left text-xs font-semibold leading-snug outline-none shadow-sm focus:ring-2 focus:ring-white/40 disabled:cursor-not-allowed disabled:opacity-50";
 
   return (
     <select
@@ -1609,7 +1642,7 @@ function InlineOrderState({
         };
         onApply(next);
       }}
-      className={`box-border w-max min-w-0 max-w-[9rem] cursor-pointer appearance-none rounded-lg border-0 px-2 py-1.5 pr-6 text-left text-xs font-semibold leading-snug outline-none shadow-sm focus:ring-2 focus:ring-white/40 disabled:cursor-not-allowed disabled:opacity-50 ${statusBadgeClass(order.status)}`}
+      className={`${isConfirmedMainRow ? selectClassConfirmed : selectClassDefault} ${statusBadgeClass(order.status)}`}
       style={{
         backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='${chevronStroke}'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`,
         backgroundRepeat: "no-repeat",
@@ -1617,12 +1650,22 @@ function InlineOrderState({
         backgroundSize: "0.65rem",
       }}
     >
-      <option value={currentKey}>{fullStatusLine(order)}</option>
-      {transitions.map((t) => (
-        <option key={t.key} value={t.key}>
-          {fullStatusLine(t.snap)}
-        </option>
-      ))}
+      {isConfirmedMainRow
+        ? CONFIRMED_ROW_STATUS_OPTIONS.map(({ snap, label }) => (
+            <option key={keyOf(snap)} value={keyOf(snap)}>
+              {label}
+            </option>
+          ))
+        : (
+            <>
+              <option value={currentKey}>{fullStatusLine(order)}</option>
+              {transitions.map((t) => (
+                <option key={t.key} value={t.key}>
+                  {fullStatusLine(t.snap)}
+                </option>
+              ))}
+            </>
+          )}
     </select>
   );
 }

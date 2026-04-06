@@ -114,6 +114,17 @@ export function isValidTransition(from: OrderSnapshot, to: OrderSnapshot): boole
   }
   if (!isValidOrderState(to.status, to.sub_status)) return false;
 
+  // From Confirmed: table UI allows New, Postponed, Cancelled (plus staying Confirmed).
+  if (from.status === "confirmed" && from.sub_status === "confirmed") {
+    if (to.status === "new" && to.sub_status === null) return true;
+    if (to.status === "under_process" && to.sub_status === "postponed") {
+      return true;
+    }
+    if (to.status === "cancelled" && to.sub_status === "cancelled") {
+      return true;
+    }
+  }
+
   if (from.status === to.status) {
     if (from.status === "under_process") {
       return (
