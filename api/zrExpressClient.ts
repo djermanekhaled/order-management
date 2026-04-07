@@ -6,23 +6,25 @@ export const ZR_BASE = "https://api.zrexpress.app";
 
 export type ZrAuthVariant = "x_api_key";
 
+/** ZR Express API key from the server environment (Vercel: Project → Settings → Environment Variables → `ZR_API_KEY`). */
+export function getZrApiKeyFromEnv(): string {
+  return (process.env.ZR_API_KEY ?? "").trim();
+}
+
 export function zrAuthVariantDescription(variant: ZrAuthVariant): string {
   if (variant === "x_api_key") {
-    return "X-Api-Key: {secretKey} (ZR Express)";
+    return "X-Api-Key from process.env.ZR_API_KEY";
   }
   return variant;
 }
 
-/** ZR Express uses X-Api-Key + X-Tenant (no Bearer / Authorization variants). */
-export function buildZrRequestHeaders(
-  tenantId: string,
-  secretKey: string
-): Record<string, string> {
+/** ZR Express uses X-Api-Key (from `ZR_API_KEY`) + X-Tenant. */
+export function buildZrRequestHeaders(tenantId: string): Record<string, string> {
   return {
     "Content-Type": "application/json",
     Accept: "application/json",
     "X-Tenant": tenantId,
-    "X-Api-Key": secretKey,
+    "X-Api-Key": getZrApiKeyFromEnv(),
   };
 }
 
@@ -102,14 +104,13 @@ export function zrExpressErrorMessage(
 }
 
 /**
- * Single ZR Express request using X-Api-Key (per ZR documentation).
+ * ZR Express request using `X-Api-Key: process.env.ZR_API_KEY` and `X-Tenant`.
  * `url` may be absolute or a path starting with `/` relative to {@link ZR_API_V1_BASE}.
  */
 export async function zrRequestWithAuthVariants(
   urlOrPath: string,
   init: { method?: string; body?: string | undefined },
   tenantId: string,
-  secretKey: string,
   options?: { logPrefix?: string }
 ): Promise<{
   res: Response;
@@ -124,7 +125,7 @@ export async function zrRequestWithAuthVariants(
     ? urlOrPath
     : `${ZR_API_V1_BASE}${urlOrPath.startsWith("/") ? "" : "/"}${urlOrPath}`;
 
-  const headers = buildZrRequestHeaders(tenantId, secretKey);
+  const headers = buildZrRequestHeaders(tenantId);
   logFullZrOutboundRequest(logPrefix, method, url, headers, body ?? "");
 
   const sendBody = method === "GET" || method === "HEAD" ? undefined : body;

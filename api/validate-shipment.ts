@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import {
   type ZrAuthVariant,
+  getZrApiKeyFromEnv,
   zrAuthVariantDescription,
   zrExpressErrorMessage,
   zrRequestWithAuthVariants,
@@ -329,8 +330,7 @@ function buildZrUiErrorPayload(
 async function resolveZrProductIdSku(
   productName: string,
   unitPrice: number,
-  xTenantId: string,
-  secretKey: string
+  xTenantId: string
 ): Promise<{ productId: string; sku: string; source: "search" | "created" }> {
   const keyword = productName.trim();
   if (!keyword) {
@@ -341,8 +341,7 @@ async function resolveZrProductIdSku(
   const searchOut = await zrRequestWithAuthVariants(
     "/products/search",
     { method: "POST", body: searchBody },
-    xTenantId,
-    secretKey
+    xTenantId
   );
 
   if (!searchOut.res.ok) {
@@ -380,8 +379,7 @@ async function resolveZrProductIdSku(
   const createOut = await zrRequestWithAuthVariants(
     "/products",
     { method: "POST", body: createBody },
-    xTenantId,
-    secretKey
+    xTenantId
   );
 
   if (!createOut.res.ok) {
@@ -456,7 +454,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
   const { data: company, error: cErr } = await db
     .from("delivery_companies")
-    .select("id, name, type, secret_key, tenant_id, active")
+    .select("id, name, type, tenant_id, active")
     .eq("id", deliveryCompanyId)
     .single();
 
@@ -512,6 +510,15 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     first10LogPreview(xTenantId)
   );
 
+  if (!getZrApiKeyFromEnv()) {
+    res.status(500).json({
+      error:
+        "Server misconfiguration: ZR_API_KEY is not set. Add ZR_API_KEY in Vercel → Project Settings → Environment Variables (and redeploy).",
+      zrStep: "zr_api_key_env",
+    });
+    return;
+  }
+
   const territoryByOrder = new Map<
     string,
     {
@@ -539,8 +546,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       const r = await resolveCityDistrictGuidsForOrder(
         order.wilaya ?? "",
         order.commune,
-        xTenantId,
-        company.secret_key
+        xTenantId
       );
       if (!r.ok) {
         mappingErrors.push(`Order ${order.id}: ${r.error}`);
@@ -585,8 +591,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       const r = await resolveZrProductIdSku(
         kw,
         Number(order.amount),
-        xTenantId,
-        company.secret_key
+        xTenantId
       );
       const sku = finalizeProductSku(kw, r.sku, r.productId);
       zrProductCacheByKeyword.set(kw, {
@@ -648,8 +653,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     bulkOutcome = await zrRequestWithAuthVariants(
       zrPath,
       { method: "POST", body: requestBody },
-      xTenantId,
-      company.secret_key
+      xTenantId
     );
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

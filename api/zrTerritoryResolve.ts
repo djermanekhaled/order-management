@@ -268,7 +268,6 @@ function pickBestDistrictForCommune(
 
 async function postTerritoriesSearch(
   tenantId: string,
-  secretKey: string,
   body: Record<string, unknown>
 ): Promise<
   | { ok: true; items: Record<string, unknown>[] }
@@ -278,7 +277,6 @@ async function postTerritoriesSearch(
     "/territories/search",
     { method: "POST", body: JSON.stringify(body) },
     tenantId,
-    secretKey,
     { logPrefix: LOG_PREFIX }
   );
   if (!out.res.ok) {
@@ -333,8 +331,7 @@ export type ResolveCityDistrictOk = {
 export async function resolveCityDistrictGuidsForOrder(
   wilaya: string,
   commune: string | null | undefined,
-  tenantId: string,
-  secretKey: string
+  tenantId: string
 ): Promise<ResolveCityDistrictOk | { ok: false; error: string }> {
   const communeT = (commune ?? "").trim();
   if (!communeT) {
@@ -387,7 +384,7 @@ export async function resolveCityDistrictGuidsForOrder(
 
   const cityId = city.territory_id;
 
-  const communeSearch = await postTerritoriesSearch(tenantId, secretKey, {
+  const communeSearch = await postTerritoriesSearch(tenantId, {
     pageNumber: 1,
     pageSize: 1000,
     keyword: communeT,
