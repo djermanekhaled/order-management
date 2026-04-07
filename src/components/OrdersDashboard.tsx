@@ -153,6 +153,7 @@ export function OrdersDashboard() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [phoneSearch, setPhoneSearch] = useState("");
   const [wilayaFilter, setWilayaFilter] = useState<string>(WILAYA_FILTER_ALL);
   const [filterProduct, setFilterProduct] = useState("");
   const [filterDeliveryCompany, setFilterDeliveryCompany] = useState("");
@@ -354,6 +355,17 @@ export function OrdersDashboard() {
       ) {
         return false;
       }
+      if (phoneSearch.trim()) {
+        const digits = phoneSearch.replace(/\D/g, "");
+        const orderPhoneDigits = (o.phone ?? "").replace(/\D/g, "");
+        if (digits) {
+          if (!orderPhoneDigits.includes(digits)) return false;
+        } else if (
+          !(o.phone ?? "").toLowerCase().includes(phoneSearch.toLowerCase())
+        ) {
+          return false;
+        }
+      }
       if (filterProduct) {
         const line = o.product.trim();
         const want = filterProduct.trim();
@@ -381,6 +393,7 @@ export function OrdersDashboard() {
     subStatusFilter,
     fromMs,
     toMs,
+    phoneSearch,
     wilayaFilter,
     filterProduct,
     filterDeliveryCompany,
@@ -558,6 +571,7 @@ export function OrdersDashboard() {
   function clearFilters() {
     setDateFrom("");
     setDateTo("");
+    setPhoneSearch("");
     setWilayaFilter(WILAYA_FILTER_ALL);
     setFilterProduct("");
     setFilterDeliveryCompany("");
@@ -938,6 +952,18 @@ export function OrdersDashboard() {
             Advanced filters
           </h3>
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-500">
+                Phone number
+              </label>
+              <input
+                type="text"
+                value={phoneSearch}
+                onChange={(e) => setPhoneSearch(e.target.value)}
+                placeholder="Search by phone"
+                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-500/60"
+              />
+            </div>
             <div>
               <label className="block text-xs font-medium text-slate-500">
                 From date
