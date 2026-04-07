@@ -1675,6 +1675,7 @@ const NEW_ROW_STATUS_OPTIONS: { snap: OrderSnapshot; label: string }[] = [
     snap: { status: "under_process", sub_status: "postponed" },
     label: "Postponed",
   },
+  { snap: { status: "cancelled", sub_status: "duplicated" }, label: "Duplicated" },
   { snap: { status: "cancelled", sub_status: "cancelled" }, label: "Cancelled" },
   {
     snap: { status: "confirmed", sub_status: "confirmed" },
