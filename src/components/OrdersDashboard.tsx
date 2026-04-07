@@ -187,15 +187,21 @@ export function OrdersDashboard() {
   const [bulkDeliveryCompanyId, setBulkDeliveryCompanyId] = useState("");
   const [bulkWorking, setBulkWorking] = useState(false);
 
-  const loadOrders = useCallback(async () => {
-    setError(null);
-    setLoading(true);
+  const loadOrders = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = opts?.silent === true;
+    if (!silent) {
+      setError(null);
+      setLoading(true);
+    }
+    const finishLoading = () => {
+      if (!silent) setLoading(false);
+    };
     const { data, error: qErr } = await supabase
       .from("orders")
       .select("*")
       .order("created_at", { ascending: false });
     if (qErr) {
-      setLoading(false);
+      finishLoading();
       setError(qErr.message);
       return;
     }
@@ -212,7 +218,7 @@ export function OrdersDashboard() {
       );
       const failed = results.find((r) => r.error);
       if (failed?.error) {
-        setLoading(false);
+        finishLoading();
         setError(failed.error.message);
         setOrders(rows);
         return;
@@ -221,7 +227,7 @@ export function OrdersDashboard() {
         .from("orders")
         .select("*")
         .order("created_at", { ascending: false });
-      setLoading(false);
+      finishLoading();
       if (q2) {
         setError(q2.message);
         setOrders(rows);
@@ -230,7 +236,7 @@ export function OrdersDashboard() {
       setOrders((fresh ?? []) as Order[]);
       return;
     }
-    setLoading(false);
+    finishLoading();
     setOrders(rows);
   }, []);
 
@@ -258,6 +264,53 @@ export function OrdersDashboard() {
   useEffect(() => {
     void loadOrders();
   }, [loadOrders]);
+
+  /** Poll WooCommerce for each active channel every minute; refresh orders after import (no loading flash). */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const origin = window.location.origin;
+    const POLL_MS = 60_000;
+    const INITIAL_DELAY_MS = 5_000;
+
+    async function syncAllActiveWooCommerceChannels() {
+      const { data: channels, error: chErr } = await supabase
+        .from("sales_channels")
+        .select("id")
+        .eq("status", "active");
+      if (chErr || !channels?.length) return;
+
+      for (const row of channels) {
+        try {
+          const res = await fetch(`${origin}/api/sync-woocommerce`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ channel_id: row.id }),
+          });
+          if (!res.ok) {
+            await res.text().catch(() => "");
+          }
+        } catch {
+          /* ignore per-channel network errors */
+        }
+      }
+
+      await loadOrders({ silent: true });
+      void loadFilterPicklists();
+    }
+
+    const initial = window.setTimeout(() => {
+      void syncAllActiveWooCommerceChannels();
+    }, INITIAL_DELAY_MS);
+
+    const interval = window.setInterval(() => {
+      void syncAllActiveWooCommerceChannels();
+    }, POLL_MS);
+
+    return () => {
+      window.clearTimeout(initial);
+      window.clearInterval(interval);
+    };
+  }, [loadOrders, loadFilterPicklists]);
 
   useEffect(() => {
     void loadFilterPicklists();

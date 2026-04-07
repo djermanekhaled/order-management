@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import type { SalesChannel, SalesChannelStatus } from "../types/salesChannel";
 import { SalesChannelModal } from "./SalesChannelModal";
@@ -19,13 +19,7 @@ export function SalesChannelsPage({
   const [channels, setChannels] = useState<SalesChannel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [syncingId, setSyncingId] = useState<string | null>(null);
-  const [syncStatusById, setSyncStatusById] = useState<Record<string, string>>({});
-
-  const origin = useMemo(() => {
-    if (typeof window === "undefined") return null;
-    return window.location.origin;
-  }, []);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const loadChannels = useCallback(async () => {
     setError(null);
@@ -75,66 +69,30 @@ export function SalesChannelsPage({
       return;
     }
     await loadChannels();
+    onChannelsChanged?.();
   }
 
-  async function syncChannel(channelId: string) {
-    if (!origin) {
-      setError("Cannot resolve app URL for sync (open this app in the browser).");
+  async function deleteChannel(ch: SalesChannel) {
+    if (
+      !window.confirm(
+        `Remove "${ch.name}" from connected channels? This disconnects the store from this dashboard.`
+      )
+    ) {
       return;
     }
     setError(null);
-    setSyncingId(channelId);
-    try {
-      const res = await fetch(`${origin}/api/sync-woocommerce`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ channel_id: channelId }),
-      });
-      const raw = await res.text();
-      let data: {
-        ok?: boolean;
-        imported?: number;
-        skipped?: number;
-        failed?: number;
-        fetched?: number;
-        errors?: string[];
-        error?: string;
-        details?: string;
-      };
-      try {
-        data = JSON.parse(raw) as typeof data;
-      } catch {
-        data = { error: raw.trim() || res.statusText || "Invalid response" };
-      }
-
-      if (!res.ok) {
-        const msg =
-          data.error ??
-          data.details ??
-          (typeof res.statusText === "string" ? res.statusText : "Sync failed");
-        setSyncStatusById((m) => ({ ...m, [channelId]: `Error: ${msg}` }));
-        return;
-      }
-
-      const parts = [
-        `Imported ${data.imported ?? 0}`,
-        `skipped ${data.skipped ?? 0}`,
-        data.failed ? `failed ${data.failed}` : null,
-        data.fetched != null ? `${data.fetched} from store` : null,
-      ].filter(Boolean);
-      let line = parts.join(" · ");
-      if (data.errors?.length) {
-        line += ` (${data.errors[0]})`;
-      }
-      setSyncStatusById((m) => ({ ...m, [channelId]: line }));
-    } catch (e) {
-      setSyncStatusById((m) => ({
-        ...m,
-        [channelId]: `Error: ${e instanceof Error ? e.message : "Request failed"}`,
-      }));
-    } finally {
-      setSyncingId(null);
+    setDeletingId(ch.id);
+    const { error: delErr } = await supabase
+      .from("sales_channels")
+      .delete()
+      .eq("id", ch.id);
+    setDeletingId(null);
+    if (delErr) {
+      setError(delErr.message);
+      return;
     }
+    await loadChannels();
+    onChannelsChanged?.();
   }
 
   return (
@@ -146,9 +104,11 @@ export function SalesChannelsPage({
           </p>
           <h2 className="mt-1 text-2xl font-semibold text-white">Sales channels</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Connect WooCommerce stores with the REST API keys. Use{" "}
-            <span className="text-slate-400">Sync</span> to import pending orders;
-            imported orders use the channel name as{" "}
+            Connect WooCommerce stores with REST API keys.{" "}
+            <span className="text-slate-400">
+              Pending orders import automatically every minute
+            </span>{" "}
+            while the app is open; imported orders use the channel name as{" "}
             <span className="text-slate-400">source</span>.
           </p>
         </div>
@@ -194,7 +154,7 @@ export function SalesChannelsPage({
               <tr className="border-b border-slate-800/80 text-xs uppercase tracking-wider text-slate-500">
                 <th className="px-5 py-3 font-medium">Name</th>
                 <th className="px-5 py-3 font-medium">Store URL</th>
-                <th className="px-5 py-3 font-medium">Sync</th>
+                <th className="px-5 py-3 font-medium">Import</th>
                 <th className="px-5 py-3 font-medium">Status</th>
                 <th className="px-5 py-3 font-medium text-right">Actions</th>
               </tr>
@@ -216,27 +176,18 @@ export function SalesChannelsPage({
                         {ch.store_url}
                       </a>
                     </td>
-                    <td className="max-w-[280px] px-5 py-3 text-slate-400">
-                      <div className="flex flex-col gap-1">
-                        <button
-                          type="button"
-                          disabled={syncingId === ch.id || ch.status !== "active"}
-                          onClick={() => void syncChannel(ch.id)}
-                          className="w-fit rounded-lg border border-indigo-600/50 bg-indigo-950/40 px-2 py-1 text-xs font-medium text-indigo-200 hover:bg-indigo-900/40 disabled:cursor-not-allowed disabled:opacity-40"
-                          title={
-                            ch.status !== "active"
-                              ? "Activate the channel to sync"
-                              : "Import pending orders from WooCommerce"
-                          }
-                        >
-                          {syncingId === ch.id ? "Syncing…" : "Sync"}
-                        </button>
-                        {syncStatusById[ch.id] ? (
-                          <p className="text-xs leading-snug text-slate-500">
-                            {syncStatusById[ch.id]}
-                          </p>
-                        ) : null}
-                      </div>
+                    <td className="px-5 py-3 text-slate-400">
+                      <span
+                        className="inline-flex rounded-lg bg-slate-800/80 px-2 py-1 text-xs font-medium text-slate-300 ring-1 ring-slate-600/50"
+                        title="Background job runs while the app is open"
+                      >
+                        Auto · every 1 min
+                      </span>
+                      {ch.status !== "active" ? (
+                        <p className="mt-1 text-xs text-slate-500">
+                          Activate the channel to include it in imports.
+                        </p>
+                      ) : null}
                     </td>
                     <td className="px-5 py-3">
                       <span
@@ -249,19 +200,30 @@ export function SalesChannelsPage({
                         {ch.status === "active" ? "Active" : "Inactive"}
                       </span>
                     </td>
-                    <td className="px-5 py-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          void toggleStatus(
-                            ch.id,
-                            ch.status === "active" ? "inactive" : "active"
-                          )
-                        }
-                        className="rounded-lg border border-slate-600 px-2 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
-                      >
-                        {ch.status === "active" ? "Deactivate" : "Activate"}
-                      </button>
+                    <td className="px-5 py-3">
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void toggleStatus(
+                              ch.id,
+                              ch.status === "active" ? "inactive" : "active"
+                            )
+                          }
+                          className="rounded-lg border border-slate-600 px-2 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
+                        >
+                          {ch.status === "active" ? "Deactivate" : "Activate"}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={deletingId === ch.id}
+                          onClick={() => void deleteChannel(ch)}
+                          className="rounded-lg border border-rose-600/50 bg-rose-950/30 px-2 py-1 text-xs font-medium text-rose-200 hover:bg-rose-950/50 disabled:cursor-not-allowed disabled:opacity-50"
+                          title="Remove this channel from the dashboard"
+                        >
+                          {deletingId === ch.id ? "Removing…" : "Delete"}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
