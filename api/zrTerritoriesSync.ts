@@ -7,6 +7,9 @@ import {
 
 const LOG_PREFIX = "[zr-territories-sync]";
 
+/** Documented as POST /api/v{version}/territories/search (OpenAPI at api.zrexpress.app/swagger/v1/swagger.json). */
+const ZR_TERRITORIES_SEARCH_PATH = "/api/v1/territories/search";
+
 export type ZrDeliveryCompanyCredentials = {
   id: string;
   tenant_id: string;
@@ -18,9 +21,6 @@ export type SyncZrTerritoriesOk = {
   cityCount: number;
   districtCount: number;
   sources: string[];
-  error: undefined;
-  zrStep: undefined;
-  zrStatus: undefined;
 };
 
 export type SyncZrTerritoriesErr = {
@@ -28,9 +28,6 @@ export type SyncZrTerritoriesErr = {
   error: string;
   zrStep: string;
   zrStatus?: number;
-  cityCount?: undefined;
-  districtCount?: undefined;
-  sources?: undefined;
 };
 
 export type SyncZrTerritoriesResult = SyncZrTerritoriesOk | SyncZrTerritoriesErr;
@@ -78,6 +75,15 @@ function extractItemsArray(zrJson: unknown): Record<string, unknown>[] {
     }
   }
   return [];
+}
+
+function extractHasNext(zrJson: unknown): boolean | undefined {
+  if (zrJson == null || typeof zrJson !== "object" || Array.isArray(zrJson)) {
+    return undefined;
+  }
+  const o = zrJson as Record<string, unknown>;
+  const v = o.hasNext;
+  return typeof v === "boolean" ? v : undefined;
 }
 
 function pickTerritoryGuid(o: Record<string, unknown>): string | null {
@@ -158,7 +164,9 @@ function rowFromDistrictItem(
   const parentRaw =
     item.parent_city_territory_id ??
     item.cityTerritoryId ??
-    item.parentCityTerritoryId;
+    item.parentCityTerritoryId ??
+    item.parentId ??
+    item.parent_id;
   const parent = asTerritoryId(parentRaw);
   return {
     company_id: companyId,
@@ -171,36 +179,105 @@ function rowFromDistrictItem(
   };
 }
 
-async function getZrTerritoryList(
-  kind: "cities" | "districts",
+/** TerritoryResponse.level (OpenAPI); distinguishes wilaya/city vs commune/district when parentId alone is ambiguous. */
+function territoryKindFromItem(
+  item: Record<string, unknown>
+): "city" | "district" | null {
+  const raw = item.level;
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  const L = raw.trim().toLowerCase();
+  if (
+    L === "district" ||
+    L.includes("district") ||
+    L.includes("commune") ||
+    L.includes("daira") ||
+    L.includes("daïra")
+  ) {
+    return "district";
+  }
+  if (
+    L === "city" ||
+    L.includes("wilaya") ||
+    L.includes("city") ||
+    L.includes("province")
+  ) {
+    return "city";
+  }
+  return null;
+}
+
+function upsertRowFromTerritoryItem(
   companyId: string,
+  item: Record<string, unknown>
+): UpsertRow | null {
+  const byLevel = territoryKindFromItem(item);
+  if (byLevel === "city") return rowFromCityItem(companyId, item);
+  if (byLevel === "district") return rowFromDistrictItem(companyId, item);
+
+  const parent = asTerritoryId(item.parentId ?? item.parent_id);
+  if (!parent || !isGuid(parent)) {
+    return rowFromCityItem(companyId, item);
+  }
+  return rowFromDistrictItem(companyId, item);
+}
+
+type TerritorySearchFailure = {
+  ok: false;
+  error: string;
+  zrStatus: number;
+  zrStep: string;
+};
+
+type TerritorySearchSuccess = {
+  ok: true;
+  items: Record<string, unknown>[];
+};
+
+async function fetchTerritoriesViaSearch(
   tenantId: string,
   secretKey: string
-): Promise<
-  | { ok: true; items: Record<string, unknown>[] }
-  | { ok: false; error: string; zrStatus: number; zrStep: string }
-> {
-  const url = `${ZR_BASE}/api/v1/territories/${kind}?company_id=${encodeURIComponent(companyId)}`;
-  const out = await zrRequestWithAuthVariants(
-    url,
-    { method: "GET" },
-    tenantId,
-    secretKey,
-    { logPrefix: LOG_PREFIX }
-  );
-  if (!out.res.ok) {
-    return {
-      ok: false,
-      error: zrExpressErrorMessage(out.res.status, out.json, out.text),
-      zrStatus: out.res.status,
-      zrStep: `territories_${kind}`,
-    };
+): Promise<TerritorySearchSuccess | TerritorySearchFailure> {
+  const url = `${ZR_BASE}${ZR_TERRITORIES_SEARCH_PATH}`;
+  const pageSize = 1000;
+  const all: Record<string, unknown>[] = [];
+  let pageNumber = 1;
+  let hasNext: boolean | undefined = true;
+
+  while (hasNext !== false && pageNumber <= 500) {
+    const body = JSON.stringify({ pageNumber, pageSize });
+    const out = await zrRequestWithAuthVariants(
+      url,
+      { method: "POST", body },
+      tenantId,
+      secretKey,
+      { logPrefix: LOG_PREFIX }
+    );
+    if (!out.res.ok) {
+      return {
+        ok: false,
+        error: zrExpressErrorMessage(out.res.status, out.json, out.text),
+        zrStatus: out.res.status,
+        zrStep: "territories_search",
+      };
+    }
+    const items = extractItemsArray(out.json);
+    for (const it of items) {
+      all.push(it);
+    }
+    const nextFromApi = extractHasNext(out.json);
+    if (nextFromApi !== undefined) {
+      hasNext = nextFromApi;
+    } else {
+      hasNext = items.length >= pageSize;
+    }
+    console.log(
+      `${LOG_PREFIX} POST ${ZR_TERRITORIES_SEARCH_PATH} page=${pageNumber} pageSize=${pageSize} → ${items.length} item(s), hasNext=${String(hasNext)}`
+    );
+    if (!hasNext) break;
+    pageNumber += 1;
   }
-  const items = extractItemsArray(out.json);
-  console.log(
-    `${LOG_PREFIX} GET /api/v1/territories/${kind}?company_id=… → ${items.length} item(s)`
-  );
-  return { ok: true, items };
+
+  return { ok: true, items: all };
 }
 
 export async function syncZrTerritoriesForCompany(
@@ -210,46 +287,30 @@ export async function syncZrTerritoriesForCompany(
   const tenantId = company.tenant_id.trim();
   const zrCompanyId = company.id;
 
-  const citiesRes = await getZrTerritoryList(
-    "cities",
-    zrCompanyId,
+  const searchRes = await fetchTerritoriesViaSearch(
     tenantId,
     company.secret_key
   );
-  if (!citiesRes.ok) {
+  if (!searchRes.ok) {
     return {
       ok: false,
-      error: citiesRes.error,
-      zrStep: citiesRes.zrStep,
-      zrStatus: citiesRes.zrStatus,
-    };
-  }
-
-  const districtsRes = await getZrTerritoryList(
-    "districts",
-    zrCompanyId,
-    tenantId,
-    company.secret_key
-  );
-  if (!districtsRes.ok) {
-    return {
-      ok: false,
-      error: districtsRes.error,
-      zrStep: districtsRes.zrStep,
-      zrStatus: districtsRes.zrStatus,
+      error: searchRes.error,
+      zrStep: searchRes.zrStep,
+      zrStatus: searchRes.zrStatus,
     };
   }
 
   const cityRows = new Map<string, UpsertRow>();
-  for (const item of citiesRes.items) {
-    const row = rowFromCityItem(zrCompanyId, item);
-    if (row) cityRows.set(row.territory_id, row);
-  }
-
   const districtRows = new Map<string, UpsertRow>();
-  for (const item of districtsRes.items) {
-    const row = rowFromDistrictItem(zrCompanyId, item);
-    if (row) districtRows.set(row.territory_id, row);
+
+  for (const item of searchRes.items) {
+    const row = upsertRowFromTerritoryItem(zrCompanyId, item);
+    if (!row) continue;
+    if (row.kind === "city") {
+      cityRows.set(row.territory_id, row);
+    } else {
+      districtRows.set(row.territory_id, row);
+    }
   }
 
   const toUpsert = [...cityRows.values(), ...districtRows.values()];
@@ -257,7 +318,7 @@ export async function syncZrTerritoriesForCompany(
     return {
       ok: false,
       error:
-        "ZR territories sync returned no rows: empty or unparsable `items` from GET /api/v1/territories/cities and GET /api/v1/territories/districts.",
+        `ZR territories sync returned no rows: empty or unparsable \`items\` from POST ${ZR_TERRITORIES_SEARCH_PATH}.`,
       zrStep: "territory_sync_empty",
     };
   }
@@ -276,14 +337,8 @@ export async function syncZrTerritoriesForCompany(
 
   return {
     ok: true,
-    error: undefined,
-    zrStep: undefined,
-    zrStatus: undefined,
     cityCount: cityRows.size,
     districtCount: districtRows.size,
-    sources: [
-      "GET /api/v1/territories/cities",
-      "GET /api/v1/territories/districts",
-    ],
+    sources: [`POST ${ZR_TERRITORIES_SEARCH_PATH}`],
   };
 }
