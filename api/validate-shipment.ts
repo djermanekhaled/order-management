@@ -1,6 +1,14 @@
 import type { IncomingMessage } from "node:http";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import {
+  ZR_BASE,
+  type ZrAuthVariant,
+  zrAuthVariantDescription,
+  zrExpressErrorMessage,
+  zrRequestWithAuthVariants,
+} from "./zrExpressClient.js";
+import { syncZrTerritoriesForCompany } from "./zrTerritoriesSync.js";
 
 type ApiRequest = IncomingMessage & {
   query?: Record<string, string | string[] | undefined>;
@@ -25,8 +33,6 @@ type DbOrder = {
   sub_status: string | null;
   delivery_type: string | null;
 };
-
-const ZR_BASE = "https://api.zrexpress.app";
 
 function parseJsonBody(req: ApiRequest): unknown | null {
   const b = req.body;
@@ -71,12 +77,6 @@ function asTerritoryId(v: unknown): string | null {
   return null;
 }
 
-function isGuid(v: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    v.trim()
-  );
-}
-
 /** SKU sent to ZR create API (max 10 chars per prior spec). */
 function skuForZrCreateApi(orderProduct: string): string {
   const p = orderProduct.trim();
@@ -116,84 +116,6 @@ function primaryWilayaName(wilaya: string): string {
   const m = t.match(/[—–-]\s*(.+)$/u);
   if (m?.[1]) return normGeoKey(m[1].trim());
   return normGeoKey(t);
-}
-
-function hubAddressCity(hub: Record<string, unknown>): string {
-  const addr = hub.address;
-  if (addr && typeof addr === "object" && !Array.isArray(addr)) {
-    const c = (addr as Record<string, unknown>).city;
-    if (typeof c === "string") return c;
-  }
-  return "";
-}
-
-function hubCityTerritoryId(hub: Record<string, unknown>): string | null {
-  return asTerritoryId(
-    hub.cityTerritoryId ?? hub.city_territory_id ?? hub.cityTerritoryID
-  );
-}
-
-function hubDistrictTerritoryId(hub: Record<string, unknown>): string | null {
-  return asTerritoryId(
-    hub.districtTerritoryId ??
-      hub.district_territory_id ??
-      hub.districtTerritoryID
-  );
-}
-
-function pickDistrictName(hub: Record<string, unknown>): string | null {
-  const labels = hubCommuneLabels(hub);
-  if (!labels.length) return null;
-  return labels[0];
-}
-
-function hubCommuneLabels(hub: Record<string, unknown>): string[] {
-  const out: string[] = [];
-  for (const k of ["name", "title", "label", "districtName", "district", "commune"]) {
-    const v = hub[k];
-    if (typeof v === "string" && v.trim()) out.push(v.trim());
-  }
-  const addr = hub.address;
-  if (addr && typeof addr === "object" && !Array.isArray(addr)) {
-    const a = addr as Record<string, unknown>;
-    for (const k of ["district", "commune", "municipality"]) {
-      const v = a[k];
-      if (typeof v === "string" && v.trim()) out.push(v.trim());
-    }
-  }
-  return [...new Set(out)];
-}
-
-
-/** Hubs from POST /api/v1/hubs/search (shape varies; we unwrap common keys). */
-function extractHubsArray(zrJson: unknown): Record<string, unknown>[] {
-  if (zrJson == null) return [];
-  if (Array.isArray(zrJson)) {
-    return zrJson.filter(
-      (x): x is Record<string, unknown> => x != null && typeof x === "object"
-    );
-  }
-  if (typeof zrJson !== "object") return [];
-  const o = zrJson as Record<string, unknown>;
-  const tryArr = (v: unknown): Record<string, unknown>[] | null => {
-    if (!Array.isArray(v)) return null;
-    return v.filter(
-      (x): x is Record<string, unknown> => x != null && typeof x === "object"
-    );
-  };
-  for (const k of ["hubs", "data", "results", "items"]) {
-    const inner = tryArr(o[k]);
-    if (inner !== null) return inner;
-  }
-  const data = o.data;
-  if (data && typeof data === "object" && !Array.isArray(data)) {
-    const d = data as Record<string, unknown>;
-    for (const k of ["hubs", "items", "results"]) {
-      const inner = tryArr(d[k]);
-      if (inner !== null) return inner;
-    }
-  }
-  return [];
 }
 
 type StoredTerritory = {
@@ -507,142 +429,10 @@ function referenceFromResult(item: unknown): string | null {
 
 const LOG_PREFIX = "[validate-shipment]";
 
-type ZrAuthVariant = "x_api_key" | "bearer" | "raw_secret";
-
-function zrAuthVariantDescription(variant: ZrAuthVariant): string {
-  switch (variant) {
-    case "x_api_key":
-      return "X-Api-Key: {secretKey} (no Authorization header)";
-    case "bearer":
-      return "Authorization: Bearer {secretKey}";
-    case "raw_secret":
-      return "Authorization: {secretKey} (no Bearer prefix)";
-  }
-}
-
-function buildZrRequestHeaders(
-  variant: ZrAuthVariant,
-  tenantId: string,
-  secretKey: string
-): Record<string, string> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Accept: "application/json",
-    "X-Tenant": tenantId,
-  };
-  if (variant === "x_api_key") {
-    headers["X-Api-Key"] = secretKey;
-    return headers;
-  }
-  if (variant === "bearer") {
-    headers.Authorization = `Bearer ${secretKey}`;
-    return headers;
-  }
-  headers.Authorization = secretKey;
-  return headers;
-}
-
-/** Log preview: first 10 characters only (rest redacted). */
 function first10LogPreview(value: string | undefined): string {
   if (value == null || value === "") return "(empty)";
   if (value.length <= 10) return value;
   return `${value.slice(0, 10)}…`;
-}
-
-function logFullZrOutboundRequest(
-  method: string,
-  url: string,
-  headers: Record<string, string>,
-  body: string,
-  authVariant: ZrAuthVariant
-): void {
-  console.log(`${LOG_PREFIX} ZR Express FULL outbound request`);
-  console.log(`${LOG_PREFIX}   Method:`, method);
-  console.log(`${LOG_PREFIX}   URL:`, url);
-  console.log(
-    `${LOG_PREFIX}   Auth attempt:`,
-    zrAuthVariantDescription(authVariant)
-  );
-  console.log(
-    `${LOG_PREFIX}   X-Tenant in use (first 10 chars):`,
-    first10LogPreview(headers["X-Tenant"])
-  );
-  const apiKey = headers["X-Api-Key"];
-  console.log(
-    `${LOG_PREFIX}   X-Api-Key in use (first 10 chars):`,
-    apiKey !== undefined
-      ? first10LogPreview(apiKey)
-      : "(not sent for this attempt — using Authorization header)"
-  );
-  const safeHeaders: Record<string, string> = { ...headers };
-  if (safeHeaders["X-Tenant"] !== undefined) {
-    safeHeaders["X-Tenant"] = first10LogPreview(safeHeaders["X-Tenant"]);
-  }
-  if (safeHeaders["X-Api-Key"] !== undefined) {
-    safeHeaders["X-Api-Key"] = first10LogPreview(safeHeaders["X-Api-Key"]);
-  }
-  if (safeHeaders.Authorization !== undefined) {
-    const a = safeHeaders.Authorization;
-    const bearer = /^Bearer\s+/i.test(a);
-    const secret = bearer ? a.replace(/^Bearer\s+/i, "") : a;
-    safeHeaders.Authorization = bearer
-      ? `Bearer ${first10LogPreview(secret)}`
-      : first10LogPreview(a);
-  }
-  console.log(
-    `${LOG_PREFIX}   Headers (sensitive values truncated to 10 chars):`,
-    safeHeaders
-  );
-  console.log(`${LOG_PREFIX}   Body (complete):`, body);
-}
-
-/**
- * Best-effort human-readable message from ZR Express error responses.
- */
-function zrExpressErrorMessage(
-  httpStatus: number,
-  zrJson: unknown,
-  zrText: string
-): string {
-  if (zrJson && typeof zrJson === "object" && !Array.isArray(zrJson)) {
-    const o = zrJson as Record<string, unknown>;
-    const direct = o.message ?? o.detail ?? o.title;
-    if (typeof direct === "string" && direct.trim()) return direct.trim();
-
-    const errField = o.error;
-    if (typeof errField === "string" && errField.trim()) return errField.trim();
-    if (errField && typeof errField === "object" && !Array.isArray(errField)) {
-      const nested = errField as Record<string, unknown>;
-      const nm = nested.message ?? nested.error ?? nested.detail;
-      if (typeof nm === "string" && nm.trim()) return nm.trim();
-    }
-
-    if (Array.isArray(o.errors)) {
-      const parts = o.errors
-        .map((item) => {
-          if (typeof item === "string") return item;
-          if (item && typeof item === "object") {
-            const e = item as Record<string, unknown>;
-            const m = e.message ?? e.error ?? e.detail;
-            if (typeof m === "string" && m.trim()) return m.trim();
-          }
-          return null;
-        })
-        .filter((s): s is string => Boolean(s));
-      if (parts.length) return parts.join("; ");
-    }
-
-    const data = o.data;
-    if (data && typeof data === "object" && !Array.isArray(data)) {
-      const d = data as Record<string, unknown>;
-      const m = d.message ?? d.error ?? d.detail;
-      if (typeof m === "string" && m.trim()) return m.trim();
-    }
-  }
-
-  const trimmed = zrText.trim();
-  if (trimmed) return trimmed.length > 2000 ? `${trimmed.slice(0, 2000)}…` : trimmed;
-  return `ZR Express returned HTTP ${httpStatus}`;
 }
 
 /** Collect nested ZR validation / error strings for UI. */
@@ -695,75 +485,6 @@ function buildZrUiErrorPayload(
     zrErrorDetails: details.length ? [primary, ...details] : [primary],
     zrAuthorizationVariant: zrAuthVariantDescription(authVariant),
   };
-}
-
-async function zrRequestWithAuthVariants(
-  url: string,
-  init: { method?: string; body?: string | undefined },
-  tenantId: string,
-  secretKey: string
-): Promise<{
-  res: Response;
-  text: string;
-  json: unknown;
-  variant: ZrAuthVariant;
-}> {
-  const method = init.method ?? "POST";
-  const body = init.body;
-  const variants: ZrAuthVariant[] = ["x_api_key", "bearer", "raw_secret"];
-  let last!: {
-    res: Response;
-    text: string;
-    json: unknown;
-    variant: ZrAuthVariant;
-  };
-
-  for (let i = 0; i < variants.length; i++) {
-    const variant = variants[i];
-    const headers = buildZrRequestHeaders(variant, tenantId, secretKey);
-    logFullZrOutboundRequest(method, url, headers, body ?? "", variant);
-
-    const res = await fetch(url, { method, headers, body });
-    const text = await res.text();
-    let json: unknown = null;
-    try {
-      json = text ? JSON.parse(text) : null;
-    } catch {
-      json = null;
-    }
-
-    console.log(
-      `${LOG_PREFIX} ZR Express response status [${variant}]:`,
-      res.status
-    );
-    console.log(`${LOG_PREFIX} ZR Express response body [${variant}]:`, text);
-
-    last = { res, text, json, variant };
-
-    if (res.ok) {
-      console.log(
-        `${LOG_PREFIX} ZR Express accepted auth method:`,
-        zrAuthVariantDescription(variant)
-      );
-      return last;
-    }
-
-    const authRejected = res.status === 401 || res.status === 403;
-    const hasNext = i < variants.length - 1;
-
-    if (authRejected && hasNext) {
-      const next = variants[i + 1];
-      console.log(
-        `${LOG_PREFIX} Auth rejected (HTTP ${res.status}); next attempt:`,
-        zrAuthVariantDescription(next)
-      );
-      continue;
-    }
-
-    return last;
-  }
-
-  return last;
 }
 
 async function resolveZrProductIdSku(
@@ -954,132 +675,74 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     first10LogPreview(xTenantId)
   );
 
-  const hubsSearchUrl = `${ZR_BASE}/api/v1/hubs/search`;
-  const hubsSearchBody = JSON.stringify({ pageNumber: 1, pageSize: 500 });
-  let hubList: Record<string, unknown>[] = [];
-  try {
-    const hubsOut = await zrRequestWithAuthVariants(
-      hubsSearchUrl,
-      { method: "POST", body: hubsSearchBody },
-      xTenantId,
-      company.secret_key
-    );
-    if (hubsOut.res.ok) {
-      hubList = extractHubsArray(hubsOut.json);
-      console.log(
-        `${LOG_PREFIX} hubs/search OK → ${hubList.length} hub record(s) (unwrapped)`
-      );
-    } else {
-      res
-        .status(502)
-        .json(
-          buildZrUiErrorPayload(
-            hubsOut.res.status,
-            hubsOut.json,
-            hubsOut.text,
-            hubsOut.variant,
-            "hubs_search"
-          )
-        );
-      return;
-    }
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    res.status(502).json({
-      error: `Failed to fetch ZR territories from hubs/search: ${msg}`,
-      zrStep: "hubs_search",
+  const syncResult = await syncZrTerritoriesForCompany(db, {
+    id: company.id,
+    tenant_id: xTenantId,
+    secret_key: company.secret_key,
+  });
+  if (!syncResult.ok) {
+    res.status(syncResult.zrStatus && syncResult.zrStatus >= 400 ? 502 : 500).json({
+      error: `Failed to sync ZR territories: ${syncResult.error}`,
+      zrStep: syncResult.zrStep,
+      zrStatus: syncResult.zrStatus,
     });
     return;
   }
 
-  const cityRowsById = new Map<
-    string,
-    {
-      company_id: string;
-      territory_id: string;
-      kind: "city";
-      name: string;
-      normalized_name: string;
-      parent_city_territory_id: string | null;
-      source: string;
-    }
-  >();
-  const districtRowsById = new Map<
-    string,
-    {
-      company_id: string;
-      territory_id: string;
-      kind: "district";
-      name: string;
-      normalized_name: string;
-      parent_city_territory_id: string | null;
-      source: string;
-    }
-  >();
-  for (const hub of hubList) {
-    const cityId = hubCityTerritoryId(hub);
-    const cityNameRaw = hubAddressCity(hub);
-    if (cityId && isGuid(cityId) && cityNameRaw.trim()) {
-      cityRowsById.set(cityId, {
-        company_id: company.id,
-        territory_id: cityId,
-        kind: "city",
-        name: cityNameRaw.trim(),
-        normalized_name: normGeoKey(cityNameRaw),
-        parent_city_territory_id: null,
-        source: "hubs_search",
-      });
-    }
-    const districtId = hubDistrictTerritoryId(hub);
-    const districtName = pickDistrictName(hub);
-    if (
-      districtId &&
-      isGuid(districtId) &&
-      districtName &&
-      districtName.trim() &&
-      cityId &&
-      isGuid(cityId)
-    ) {
-      districtRowsById.set(districtId, {
-        company_id: company.id,
-        territory_id: districtId,
-        kind: "district",
-        name: districtName.trim(),
-        normalized_name: normGeoKey(districtName),
-        parent_city_territory_id: cityId,
-        source: "hubs_search",
-      });
-    }
-  }
-  const toUpsert = [
-    ...cityRowsById.values(),
-    ...districtRowsById.values(),
-  ];
-  if (toUpsert.length > 0) {
-    const { error: territoryUpsertErr } = await db
+  async function loadStoredTerritories(): Promise<StoredTerritory[]> {
+    const { data: storedTerritories, error: territoryReadErr } = await db
       .from("zr_territories")
-      .upsert(toUpsert, { onConflict: "company_id,territory_id,kind" });
-    if (territoryUpsertErr) {
-      res.status(500).json({
-        error: `Failed to persist ZR territories in Supabase: ${territoryUpsertErr.message}`,
-        zrStep: "territory_sync_store",
-      });
-      return;
+      .select("territory_id, kind, name, normalized_name, parent_city_territory_id")
+      .eq("company_id", company.id)
+      .order("name", { ascending: true });
+    if (territoryReadErr) {
+      throw new Error(territoryReadErr.message);
     }
+    return (storedTerritories ?? []) as StoredTerritory[];
   }
-  const { data: storedTerritories, error: territoryReadErr } = await db
-    .from("zr_territories")
-    .select("territory_id, kind, name, normalized_name, parent_city_territory_id")
-    .eq("company_id", company.id)
-    .order("name", { ascending: true });
-  if (territoryReadErr) {
+
+  async function mapOrdersToTerritories(rows: StoredTerritory[]) {
+    const territoryByOrder = new Map<
+      string,
+      { cityTerritoryId: string; districtTerritoryId: string }
+    >();
+    const mappingErrors: string[] = [];
+    for (const order of list) {
+      const mapped = mapTerritoriesFromStore(
+        rows,
+        order.wilaya ?? "",
+        order.commune ?? ""
+      );
+      if (!mapped.cityTerritoryId) {
+        mappingErrors.push(
+          `Order ${order.id}: no CityTerritoryId mapping for wilaya "${order.wilaya}".`
+        );
+        continue;
+      }
+      if (!mapped.districtTerritoryId) {
+        mappingErrors.push(
+          `Order ${order.id}: no DistrictTerritoryId mapping for commune "${order.commune ?? ""}" (wilaya "${order.wilaya}").`
+        );
+        continue;
+      }
+      territoryByOrder.set(order.id, {
+        cityTerritoryId: mapped.cityTerritoryId,
+        districtTerritoryId: mapped.districtTerritoryId,
+      });
+    }
+    return { territoryByOrder, mappingErrors };
+  }
+
+  let mappedRows: StoredTerritory[];
+  try {
+    mappedRows = await loadStoredTerritories();
+  } catch (e) {
     res.status(500).json({
-      error: `Failed to read ZR territories from Supabase: ${territoryReadErr.message}`,
+      error: `Failed to read ZR territories from Supabase: ${e instanceof Error ? e.message : String(e)}`,
       zrStep: "territory_read_store",
     });
     return;
   }
-  const mappedRows = (storedTerritories ?? []) as StoredTerritory[];
   if (mappedRows.length === 0) {
     res.status(400).json({
       error:
@@ -1089,34 +752,27 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return;
   }
 
-  const territoryByOrder = new Map<
-    string,
-    { cityTerritoryId: string; districtTerritoryId: string }
-  >();
-  const mappingErrors: string[] = [];
-  for (const order of list) {
-    const mapped = mapTerritoriesFromStore(
-      mappedRows,
-      order.wilaya ?? "",
-      order.commune ?? ""
-    );
-    if (!mapped.cityTerritoryId) {
-      mappingErrors.push(
-        `Order ${order.id}: no CityTerritoryId mapping for wilaya "${order.wilaya}".`
-      );
-      continue;
-    }
-    if (!mapped.districtTerritoryId) {
-      mappingErrors.push(
-        `Order ${order.id}: no DistrictTerritoryId mapping for commune "${order.commune ?? ""}" (wilaya "${order.wilaya}").`
-      );
-      continue;
-    }
-    territoryByOrder.set(order.id, {
-      cityTerritoryId: mapped.cityTerritoryId,
-      districtTerritoryId: mapped.districtTerritoryId,
+  let { territoryByOrder, mappingErrors } = await mapOrdersToTerritories(mappedRows);
+
+  if (mappingErrors.length > 0) {
+    // Retry once after a fresh full sync to capture newly available territories.
+    const retrySync = await syncZrTerritoriesForCompany(db, {
+      id: company.id,
+      tenant_id: xTenantId,
+      secret_key: company.secret_key,
     });
+    if (retrySync.ok) {
+      try {
+        mappedRows = await loadStoredTerritories();
+        ({ territoryByOrder, mappingErrors } = await mapOrdersToTerritories(
+          mappedRows
+        ));
+      } catch {
+        // keep original mapping errors
+      }
+    }
   }
+
   if (mappingErrors.length > 0) {
     res.status(400).json({
       error:
@@ -1287,7 +943,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     );
   }
   successWarnings.push(
-    `Territories synced from ZR hubs/search: ${hubList.length} hub record(s), ${mappedRows.length} stored territory row(s).`
+    `Territories synced: ${syncResult.cityCount} cities, ${syncResult.districtCount} districts (${syncResult.hubRecords} hub rows across ${syncResult.hubPages} page(s)).`
   );
 
   res.status(200).json({
@@ -1296,10 +952,15 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     zrResultCount: results.length,
     zrAuthorizationVariant: zrAuthVariantDescription(zrAuthVariantUsed),
     zrXTenantId: xTenantId,
-    zrTerritoryListSource: "hubs_search",
-    zrHubCount: hubList.length,
+    zrTerritoryListSource: "zr_territories",
+    zrHubCount: syncResult.hubRecords,
     zrHubsSearchOk: true,
-    zrTerritoryResolutionSummary: { orderCount: list.length },
+    zrTerritoryResolutionSummary: {
+      orderCount: list.length,
+      cityCount: syncResult.cityCount,
+      districtCount: syncResult.districtCount,
+      territorySyncSources: syncResult.sources,
+    },
     warnings: successWarnings.length ? successWarnings : undefined,
     errors: errors.length ? errors : undefined,
   });
