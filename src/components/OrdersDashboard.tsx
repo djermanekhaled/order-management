@@ -68,7 +68,7 @@ function normalizePhoneForDedup(phone: string | null | undefined): string | null
 /** Among `new` orders, same normalized phone → keep earliest `created_at` as New; mark later rows duplicated. */
 function computeNewOrderDuplicateIds(orders: Order[]): string[] {
   const newOnes = orders.filter(
-    (o) => o.status === "new" && o.sub_status == null
+    (o) => o.status === "new" && (o.sub_status == null || o.sub_status === "duplicated")
   );
   const byPhone = new Map<string, Order[]>();
   for (const o of newOnes) {
@@ -206,7 +206,7 @@ export function OrdersDashboard() {
         dupIds.map((id) =>
           supabase
             .from("orders")
-            .update({ status: "cancelled", sub_status: "duplicated" })
+            .update({ status: "new", sub_status: "duplicated" })
             .eq("id", id)
         )
       );
@@ -1582,7 +1582,10 @@ function orderTableDataCell(
 }
 
 function fullStatusLine(o: Pick<Order, "status" | "sub_status">): string {
-  if (o.status === "new") return "New";
+  if (o.status === "new") {
+    if (o.sub_status === "duplicated") return "Duplicated";
+    return "New";
+  }
   const main = statusLabel(o.status);
   if (o.sub_status == null) return main;
   if (o.status === "confirmed" || o.status === "follow") {
@@ -1611,6 +1614,9 @@ function statusBadgeClass(status: OrderStatus): string {
 }
 
 function inlineStatusBadgeClass(o: Order): string {
+  if (o.status === "new" && o.sub_status === "duplicated") {
+    return "bg-amber-500 text-slate-900";
+  }
   if (o.status === "completed") {
     if (o.sub_status === "delivered") return "bg-emerald-600 text-white";
     if (o.sub_status === "returned") return "bg-red-600 text-white";
@@ -1627,13 +1633,16 @@ function inlineStatusBadgeClass(o: Order): string {
 
 function inlineSelectChevronStroke(o: Order): string {
   if (o.status === "follow") return "%231e293b";
-  if (o.status === "cancelled" && o.sub_status === "duplicated") {
+  if (o.sub_status === "duplicated") {
     return "%231e293b";
   }
   return "%23ffffff";
 }
 
 function inlineCurrentOptionLabel(o: Order): string {
+  if (o.status === "new" && o.sub_status === "duplicated") {
+    return "Duplicated";
+  }
   if (o.status === "completed" && o.sub_status != null) {
     return subStatusLabel(o.sub_status);
   }
@@ -1675,7 +1684,7 @@ const NEW_ROW_STATUS_OPTIONS: { snap: OrderSnapshot; label: string }[] = [
     snap: { status: "under_process", sub_status: "postponed" },
     label: "Postponed",
   },
-  { snap: { status: "cancelled", sub_status: "duplicated" }, label: "Duplicated" },
+  { snap: { status: "new", sub_status: "duplicated" }, label: "Duplicated" },
   { snap: { status: "cancelled", sub_status: "cancelled" }, label: "Cancelled" },
   {
     snap: { status: "confirmed", sub_status: "confirmed" },
@@ -1728,7 +1737,12 @@ function InlineOrderState({
   onApply: (next: OrderSnapshot) => void;
 }) {
   function normalizeSnap(o: Order): OrderSnapshot {
-    if (o.status === "new") return { status: "new", sub_status: null };
+    if (o.status === "new") {
+      return {
+        status: "new",
+        sub_status: o.sub_status === "duplicated" ? "duplicated" : null,
+      };
+    }
     if (o.status === "confirmed" || o.status === "follow") {
       return { status: o.status, sub_status: o.sub_status ?? "confirmed" };
     }
@@ -1832,7 +1846,7 @@ function InlineOrderState({
         </>
       ) : isNewMainRow ? (
         <>
-          <option value={currentKey}>{fullStatusLine(order)}</option>
+          <option value={currentKey}>{inlineCurrentOptionLabel(order)}</option>
           {NEW_ROW_STATUS_OPTIONS.map(({ snap, label }) => (
             <option key={keyOf(snap)} value={keyOf(snap)}>
               {label}

@@ -65,7 +65,7 @@ export function isValidOrderState(
 ): boolean {
   switch (status) {
     case "new":
-      return sub === null;
+      return sub === null || sub === "duplicated";
     case "under_process":
       return sub !== null && UNDER_PROCESS_SUBS.includes(sub);
     case "confirmed":
@@ -133,6 +133,11 @@ export function isValidTransition(from: OrderSnapshot, to: OrderSnapshot): boole
   }
 
   if (from.status === to.status) {
+    if (from.status === "new") {
+      const fromOk = from.sub_status === null || from.sub_status === "duplicated";
+      const toOk = to.sub_status === null || to.sub_status === "duplicated";
+      return fromOk && toOk && from.sub_status !== to.sub_status;
+    }
     if (from.status === "under_process") {
       return (
         to.sub_status !== null &&
@@ -186,7 +191,7 @@ export function subStatusesForStatus(
 ): (OrderSubStatus | null)[] {
   switch (status) {
     case "new":
-      return [null];
+      return [null, "duplicated"];
     case "confirmed":
     case "follow":
       return ["confirmed"];

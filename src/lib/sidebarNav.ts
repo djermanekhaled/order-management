@@ -3,7 +3,10 @@ import type { Order, SidebarNavKey } from "../types/order";
 export function orderMatchesNavKey(order: Order, key: SidebarNavKey): boolean {
   if (key === "all") return true;
   if (key === "new") {
-    return order.status === "new" && order.sub_status == null;
+    return (
+      order.status === "new" &&
+      (order.sub_status == null || order.sub_status === "duplicated")
+    );
   }
   if (key === "confirmed") {
     return (
