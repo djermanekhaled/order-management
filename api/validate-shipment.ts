@@ -943,7 +943,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     );
   }
   successWarnings.push(
-    `Territories synced: ${syncResult.cityCount} cities, ${syncResult.districtCount} districts (${syncResult.hubRecords} hub rows across ${syncResult.hubPages} page(s)).`
+    `Territories synced: ${syncResult.cityCount} cities, ${syncResult.districtCount} districts (ZR GET /api/territories/cities + /districts).`
   );
 
   res.status(200).json({
@@ -953,7 +953,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     zrAuthorizationVariant: zrAuthVariantDescription(zrAuthVariantUsed),
     zrXTenantId: xTenantId,
     zrTerritoryListSource: "zr_territories",
-    zrHubCount: syncResult.hubRecords,
+    zrHubCount: syncResult.cityCount + syncResult.districtCount,
     zrHubsSearchOk: true,
     zrTerritoryResolutionSummary: {
       orderCount: list.length,
