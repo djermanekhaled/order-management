@@ -130,10 +130,6 @@ function validateShipmentApiUrl(): string {
   return appApiUrl("/api/validate-shipment");
 }
 
-function syncZrTerritoriesApiUrl(): string {
-  return appApiUrl("/api/sync-zr-territories");
-}
-
 export function OrdersDashboard() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -195,10 +191,6 @@ export function OrdersDashboard() {
   );
   const [bulkDeliveryCompanyId, setBulkDeliveryCompanyId] = useState("");
   const [bulkWorking, setBulkWorking] = useState(false);
-  const [bulkTerritorySyncHint, setBulkTerritorySyncHint] = useState<string | null>(
-    null
-  );
-
   const loadOrders = useCallback(async (opts?: { silent?: boolean }) => {
     const silent = opts?.silent === true;
     if (!silent) {
@@ -714,71 +706,11 @@ export function OrdersDashboard() {
     await loadOrders();
   }
 
-  async function syncZrTerritoriesForSelectedCompany(): Promise<void> {
-    if (!bulkDeliveryCompanyId) return;
-    setBulkWorking(true);
-    setError(null);
-    setBulkTerritorySyncHint(null);
-    try {
-      const syncRes = await fetch(syncZrTerritoriesApiUrl(), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deliveryCompanyId: bulkDeliveryCompanyId }),
-      });
-      const syncData = (await syncRes.json()) as {
-        ok?: boolean;
-        error?: string;
-        zrStep?: string;
-        cityCount?: number;
-        districtCount?: number;
-      };
-      if (!syncRes.ok) {
-        throw new Error(
-          syncData.error ??
-            `Territory sync failed (${syncRes.status}${syncData.zrStep ? ` · ${syncData.zrStep}` : ""})`
-        );
-      }
-      const parts = [
-        syncData.cityCount != null ? `${syncData.cityCount} cities` : null,
-        syncData.districtCount != null ? `${syncData.districtCount} districts` : null,
-      ].filter(Boolean);
-      setBulkTerritorySyncHint(
-        parts.length
-          ? `ZR territories updated (${parts.join(", ")}).`
-          : "ZR territories synced."
-      );
-    } catch (e) {
-      setError(
-        e instanceof Error ? e.message : "Failed to sync ZR territories."
-      );
-    } finally {
-      setBulkWorking(false);
-    }
-  }
-
   async function validateShipmentBulk() {
     if (!bulkDeliveryCompanyId || selectedOrderIds.size === 0) return;
     setBulkWorking(true);
     setError(null);
-    setBulkTerritorySyncHint(null);
     try {
-      const syncRes = await fetch(syncZrTerritoriesApiUrl(), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ deliveryCompanyId: bulkDeliveryCompanyId }),
-      });
-      const syncData = (await syncRes.json()) as {
-        ok?: boolean;
-        error?: string;
-        zrStep?: string;
-      };
-      if (!syncRes.ok) {
-        throw new Error(
-          syncData.error ??
-            `Territory sync failed (${syncRes.status}${syncData.zrStep ? ` · ${syncData.zrStep}` : ""})`
-        );
-      }
-
       const res = await fetch(validateShipmentApiUrl(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1354,7 +1286,6 @@ export function OrdersDashboard() {
                   value={bulkDeliveryCompanyId}
                   onChange={(e) => {
                     setBulkDeliveryCompanyId(e.target.value);
-                    setBulkTerritorySyncHint(null);
                   }}
                   disabled={bulkWorking}
                   className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-500/60 disabled:opacity-50"
@@ -1383,15 +1314,6 @@ export function OrdersDashboard() {
                   </button>
                   <button
                     type="button"
-                    disabled={bulkWorking || !bulkDeliveryCompanyId}
-                    onClick={() => void syncZrTerritoriesForSelectedCompany()}
-                    className="rounded-xl border border-amber-600/50 bg-amber-950/40 px-4 py-2 text-sm font-medium text-amber-100 hover:bg-amber-900/35 disabled:cursor-not-allowed disabled:opacity-40"
-                    title="Fetch cities and districts from ZR Express into Supabase"
-                  >
-                    {bulkWorking ? "Working…" : "Sync ZR territories"}
-                  </button>
-                  <button
-                    type="button"
                     disabled={
                       bulkWorking ||
                       !bulkDeliveryCompanyId ||
@@ -1403,9 +1325,6 @@ export function OrdersDashboard() {
                     {bulkWorking ? "Working…" : "Validate shipment"}
                   </button>
                 </div>
-                {bulkTerritorySyncHint ? (
-                  <p className="text-xs text-emerald-400/90">{bulkTerritorySyncHint}</p>
-                ) : null}
               </div>
             </div>
           )}

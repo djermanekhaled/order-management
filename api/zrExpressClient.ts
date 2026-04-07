@@ -1,38 +1,29 @@
+/** ZR Express REST API base (versioned). All routes are under this path. */
+export const ZR_API_V1_BASE = "https://api.zrexpress.app/api/v1";
+
+/** Host only (no path). Prefer {@link ZR_API_V1_BASE} for API calls. */
 export const ZR_BASE = "https://api.zrexpress.app";
 
-export type ZrAuthVariant = "x_api_key" | "bearer" | "raw_secret";
+export type ZrAuthVariant = "x_api_key";
 
 export function zrAuthVariantDescription(variant: ZrAuthVariant): string {
-  switch (variant) {
-    case "x_api_key":
-      return "X-Api-Key: {secretKey} (no Authorization header)";
-    case "bearer":
-      return "Authorization: Bearer {secretKey}";
-    case "raw_secret":
-      return "Authorization: {secretKey} (no Bearer prefix)";
+  if (variant === "x_api_key") {
+    return "X-Api-Key: {secretKey} (ZR Express)";
   }
+  return variant;
 }
 
+/** ZR Express uses X-Api-Key + X-Tenant (no Bearer / Authorization variants). */
 export function buildZrRequestHeaders(
-  variant: ZrAuthVariant,
   tenantId: string,
   secretKey: string
 ): Record<string, string> {
-  const headers: Record<string, string> = {
+  return {
     "Content-Type": "application/json",
     Accept: "application/json",
     "X-Tenant": tenantId,
+    "X-Api-Key": secretKey,
   };
-  if (variant === "x_api_key") {
-    headers["X-Api-Key"] = secretKey;
-    return headers;
-  }
-  if (variant === "bearer") {
-    headers.Authorization = `Bearer ${secretKey}`;
-    return headers;
-  }
-  headers.Authorization = secretKey;
-  return headers;
 }
 
 function first10LogPreview(value: string | undefined): string {
@@ -46,35 +37,19 @@ function logFullZrOutboundRequest(
   method: string,
   url: string,
   headers: Record<string, string>,
-  body: string,
-  authVariant: ZrAuthVariant
+  body: string
 ): void {
   console.log(`${logPrefix} ZR Express FULL outbound request`);
   console.log(`${logPrefix}   Method:`, method);
   console.log(`${logPrefix}   URL:`, url);
-  console.log(`${logPrefix}   Auth attempt:`, zrAuthVariantDescription(authVariant));
+  console.log(`${logPrefix}   Auth:`, zrAuthVariantDescription("x_api_key"));
   console.log(`${logPrefix}   X-Tenant in use (first 10 chars):`, first10LogPreview(headers["X-Tenant"]));
-  const apiKey = headers["X-Api-Key"];
-  console.log(
-    `${logPrefix}   X-Api-Key in use (first 10 chars):`,
-    apiKey !== undefined
-      ? first10LogPreview(apiKey)
-      : "(not sent for this attempt — using Authorization header)"
-  );
   const safeHeaders: Record<string, string> = { ...headers };
   if (safeHeaders["X-Tenant"] !== undefined) {
     safeHeaders["X-Tenant"] = first10LogPreview(safeHeaders["X-Tenant"]);
   }
   if (safeHeaders["X-Api-Key"] !== undefined) {
     safeHeaders["X-Api-Key"] = first10LogPreview(safeHeaders["X-Api-Key"]);
-  }
-  if (safeHeaders.Authorization !== undefined) {
-    const a = safeHeaders.Authorization;
-    const bearer = /^Bearer\s+/i.test(a);
-    const secret = bearer ? a.replace(/^Bearer\s+/i, "") : a;
-    safeHeaders.Authorization = bearer
-      ? `Bearer ${first10LogPreview(secret)}`
-      : first10LogPreview(a);
   }
   console.log(`${logPrefix}   Headers (sensitive values truncated to 10 chars):`, safeHeaders);
   console.log(`${logPrefix}   Body (complete):`, body);
@@ -126,8 +101,12 @@ export function zrExpressErrorMessage(
   return `ZR Express returned HTTP ${httpStatus}`;
 }
 
+/**
+ * Single ZR Express request using X-Api-Key (per ZR documentation).
+ * `url` may be absolute or a path starting with `/` relative to {@link ZR_API_V1_BASE}.
+ */
 export async function zrRequestWithAuthVariants(
-  url: string,
+  urlOrPath: string,
   init: { method?: string; body?: string | undefined },
   tenantId: string,
   secretKey: string,
@@ -141,57 +120,30 @@ export async function zrRequestWithAuthVariants(
   const logPrefix = options?.logPrefix ?? "[zr-express]";
   const method = (init.method ?? "POST").toUpperCase();
   const body = init.body;
-  const variants: ZrAuthVariant[] = ["x_api_key", "bearer", "raw_secret"];
-  let last!: {
-    res: Response;
-    text: string;
-    json: unknown;
-    variant: ZrAuthVariant;
-  };
+  const url = urlOrPath.startsWith("http")
+    ? urlOrPath
+    : `${ZR_API_V1_BASE}${urlOrPath.startsWith("/") ? "" : "/"}${urlOrPath}`;
+
+  const headers = buildZrRequestHeaders(tenantId, secretKey);
+  logFullZrOutboundRequest(logPrefix, method, url, headers, body ?? "");
 
   const sendBody = method === "GET" || method === "HEAD" ? undefined : body;
 
-  for (let i = 0; i < variants.length; i++) {
-    const variant = variants[i];
-    const headers = buildZrRequestHeaders(variant, tenantId, secretKey);
-    logFullZrOutboundRequest(logPrefix, method, url, headers, body ?? "", variant);
-
-    const res = await fetch(url, { method, headers, body: sendBody });
-    const text = await res.text();
-    let json: unknown = null;
-    try {
-      json = text ? JSON.parse(text) : null;
-    } catch {
-      json = null;
-    }
-
-    console.log(`${logPrefix} ZR Express response status [${variant}]:`, res.status);
-    console.log(`${logPrefix} ZR Express response body [${variant}]:`, text);
-
-    last = { res, text, json, variant };
-
-    if (res.ok) {
-      console.log(
-        `${logPrefix} ZR Express accepted auth method:`,
-        zrAuthVariantDescription(variant)
-      );
-      return last;
-    }
-
-    const authRejected = res.status === 401 || res.status === 403;
-    const hasNext = i < variants.length - 1;
-
-    if (authRejected && hasNext) {
-      const next = variants[i + 1];
-      console.log(
-        `${logPrefix} Auth rejected (HTTP ${res.status}); next attempt:`,
-        zrAuthVariantDescription(next)
-      );
-      continue;
-    }
-
-    return last;
+  const res = await fetch(url, { method, headers, body: sendBody });
+  const text = await res.text();
+  let json: unknown = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = null;
   }
 
-  return last;
+  console.log(`${logPrefix} ZR Express response status:`, res.status);
+  console.log(`${logPrefix} ZR Express response body:`, text);
+
+  if (res.ok) {
+    console.log(`${logPrefix} ZR Express request OK (${zrAuthVariantDescription("x_api_key")})`);
+  }
+
+  return { res, text, json, variant: "x_api_key" };
 }

@@ -2,13 +2,12 @@ import type { IncomingMessage } from "node:http";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import {
-  ZR_BASE,
   type ZrAuthVariant,
   zrAuthVariantDescription,
   zrExpressErrorMessage,
   zrRequestWithAuthVariants,
 } from "./zrExpressClient.js";
-import { syncZrTerritoriesForCompany } from "./zrTerritoriesSync.js";
+import { resolveCityDistrictGuidsForOrder } from "./zrTerritoryResolve.js";
 
 type ApiRequest = IncomingMessage & {
   query?: Record<string, string | string[] | undefined>;
@@ -101,167 +100,7 @@ function finalizeProductSku(
   return "product";
 }
 
-function normGeoKey(s: string): string {
-  const t = s.trim().toLowerCase().replace(/\s+/g, " ");
-  try {
-    return t.normalize("NFD").replace(/\p{M}/gu, "");
-  } catch {
-    return t;
-  }
-}
-
-/** Wilaya option label is often "16 — Alger"; hub `address.city` is usually the city name. */
-function primaryWilayaName(wilaya: string): string {
-  const t = wilaya.trim();
-  const m = t.match(/[—–-]\s*(.+)$/u);
-  if (m?.[1]) return normGeoKey(m[1].trim());
-  return normGeoKey(t);
-}
-
-type StoredTerritory = {
-  territory_id: string;
-  kind: "city" | "district";
-  name: string;
-  normalized_name: string;
-  parent_city_territory_id: string | null;
-};
-
-/**
- * Match order wilaya text to a ZR city row (same data as POST /api/v1/territories/search).
- * Compares against both `name` and `normalized_name`.
- */
-function wilayaMatchesCityRow(
-  wilaya: string,
-  row: Pick<StoredTerritory, "name" | "normalized_name">
-): boolean {
-  const wPrimary = primaryWilayaName(wilaya);
-  const wFull = normGeoKey(wilaya);
-  const orderKeys = [...new Set([wPrimary, wFull].filter(Boolean))];
-  const rowNameN = normGeoKey(row.name);
-  const rowNorm = row.normalized_name.trim();
-  for (const key of orderKeys) {
-    if (!key) continue;
-    for (const cell of [rowNameN, rowNorm]) {
-      if (!cell) continue;
-      if (cell === key || cell.includes(key) || key.includes(cell)) return true;
-    }
-  }
-  return false;
-}
-
-function scoreCityMatch(
-  wilaya: string,
-  row: Pick<StoredTerritory, "name" | "normalized_name">
-): number {
-  const wPrimary = primaryWilayaName(wilaya);
-  const wFull = normGeoKey(wilaya);
-  const rowNameN = normGeoKey(row.name);
-  const rowNorm = row.normalized_name.trim();
-  if (rowNorm && (rowNorm === wPrimary || rowNorm === wFull)) return 100;
-  if (rowNameN && (rowNameN === wPrimary || rowNameN === wFull)) return 95;
-  if (rowNorm && (wPrimary.includes(rowNorm) || rowNorm.includes(wPrimary)))
-    return 70;
-  if (rowNameN && (wPrimary.includes(rowNameN) || rowNameN.includes(wPrimary)))
-    return 65;
-  return 10;
-}
-
-function pickBestCityForWilaya(
-  cities: StoredTerritory[],
-  wilaya: string
-): StoredTerritory | null {
-  const matches = cities.filter((c) => wilayaMatchesCityRow(wilaya, c));
-  if (matches.length === 0) return null;
-  matches.sort(
-    (a, b) => scoreCityMatch(wilaya, b) - scoreCityMatch(wilaya, a)
-  );
-  return matches[0] ?? null;
-}
-
-/**
- * Match order commune to a ZR district row scoped to the city (same as
- * POST /api/v1/territories/search + Supabase parent_city_territory_id).
- * Compares against both `name` and `normalized_name`.
- */
-function communeMatchesDistrictRow(
-  commune: string,
-  row: Pick<StoredTerritory, "name" | "normalized_name">
-): boolean {
-  const c = normGeoKey(commune ?? "");
-  if (!c) return false;
-  const rowNameN = normGeoKey(row.name);
-  const rowNorm = row.normalized_name.trim();
-  for (const cell of [rowNameN, rowNorm]) {
-    if (!cell) continue;
-    if (cell === c || cell.includes(c) || c.includes(cell)) return true;
-  }
-  return false;
-}
-
-function scoreDistrictMatch(
-  commune: string,
-  row: Pick<StoredTerritory, "name" | "normalized_name">
-): number {
-  const c = normGeoKey(commune ?? "");
-  if (!c) return 0;
-  const rowNameN = normGeoKey(row.name);
-  const rowNorm = row.normalized_name.trim();
-  if (rowNorm === c) return 100;
-  if (rowNameN === c) return 95;
-  if (rowNorm && (rowNorm.includes(c) || c.includes(rowNorm))) return 70;
-  if (rowNameN && (rowNameN.includes(c) || c.includes(rowNameN))) return 65;
-  return 10;
-}
-
-function pickBestDistrictForCommune(
-  districtsForCity: StoredTerritory[],
-  commune: string
-): StoredTerritory | null {
-  const matches = districtsForCity.filter((d) =>
-    communeMatchesDistrictRow(commune, d)
-  );
-  if (matches.length === 0) return null;
-  matches.sort(
-    (a, b) => scoreDistrictMatch(commune, b) - scoreDistrictMatch(commune, a)
-  );
-  return matches[0] ?? null;
-}
-
-/**
- * Resolve GUIDs like rows from POST /api/v1/territories/search (cities vs districts)
- * with city_territory_id (in-process; same Supabase queries / rows).
- */
-function mapTerritoriesFromStore(
-  rows: StoredTerritory[],
-  wilaya: string,
-  commune: string
-): { cityTerritoryId: string | null; districtTerritoryId: string | null } {
-  const cities = rows
-    .filter((r) => r.kind === "city")
-    .sort((a, b) => a.name.localeCompare(b.name));
-  const city = pickBestCityForWilaya(cities, wilaya);
-  if (!city) {
-    return { cityTerritoryId: null, districtTerritoryId: null };
-  }
-
-  const communeKey = normGeoKey(commune ?? "");
-  if (!communeKey) {
-    return { cityTerritoryId: city.territory_id, districtTerritoryId: null };
-  }
-
-  const districtsForCity = rows.filter(
-    (r) =>
-      r.kind === "district" &&
-      r.parent_city_territory_id === city.territory_id
-  );
-  const district = pickBestDistrictForCommune(districtsForCity, commune);
-  return {
-    cityTerritoryId: city.territory_id,
-    districtTerritoryId: district?.territory_id ?? null,
-  };
-}
-
-/** Products array from POST /api/v1/products/search or similar. */
+/** Products array from POST /products/search (under /api/v1). */
 function extractProductsArray(zrJson: unknown): Record<string, unknown>[] {
   if (zrJson == null) return [];
   if (Array.isArray(zrJson)) {
@@ -498,10 +337,9 @@ async function resolveZrProductIdSku(
     throw new Error("Product name is empty");
   }
 
-  const searchUrl = `${ZR_BASE}/api/v1/products/search`;
   const searchBody = JSON.stringify({ keyword, pageSize: 10 });
   const searchOut = await zrRequestWithAuthVariants(
-    searchUrl,
+    "/products/search",
     { method: "POST", body: searchBody },
     xTenantId,
     secretKey
@@ -533,7 +371,6 @@ async function resolveZrProductIdSku(
   }
 
   const skuNew = skuForZrCreateApi(keyword);
-  const createUrl = `${ZR_BASE}/api/v1/products`;
   const createBody = JSON.stringify({
     name: keyword,
     sku: skuNew,
@@ -541,7 +378,7 @@ async function resolveZrProductIdSku(
     stockType: "local",
   });
   const createOut = await zrRequestWithAuthVariants(
-    createUrl,
+    "/products",
     { method: "POST", body: createBody },
     xTenantId,
     secretKey
@@ -675,108 +512,43 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     first10LogPreview(xTenantId)
   );
 
-  const syncResult = await syncZrTerritoriesForCompany(db, {
-    id: company.id,
-    tenant_id: xTenantId,
-    secret_key: company.secret_key,
-  });
-  if (!syncResult.ok) {
-    res.status(syncResult.zrStatus && syncResult.zrStatus >= 400 ? 502 : 500).json({
-      error: `Failed to sync ZR territories: ${syncResult.error}`,
-      zrStep: syncResult.zrStep,
-      zrStatus: syncResult.zrStatus,
-    });
-    return;
-  }
+  const territoryByOrder = new Map<
+    string,
+    { cityTerritoryId: string; districtTerritoryId: string }
+  >();
+  const territoryCache = new Map<
+    string,
+    { cityTerritoryId: string; districtTerritoryId: string }
+  >();
+  const mappingErrors: string[] = [];
 
-  async function loadStoredTerritories(): Promise<StoredTerritory[]> {
-    const { data: storedTerritories, error: territoryReadErr } = await db
-      .from("zr_territories")
-      .select("territory_id, kind, name, normalized_name, parent_city_territory_id")
-      .eq("company_id", company.id)
-      .order("name", { ascending: true });
-    if (territoryReadErr) {
-      throw new Error(territoryReadErr.message);
-    }
-    return (storedTerritories ?? []) as StoredTerritory[];
-  }
-
-  async function mapOrdersToTerritories(rows: StoredTerritory[]) {
-    const territoryByOrder = new Map<
-      string,
-      { cityTerritoryId: string; districtTerritoryId: string }
-    >();
-    const mappingErrors: string[] = [];
-    for (const order of list) {
-      const mapped = mapTerritoriesFromStore(
-        rows,
+  for (const order of list) {
+    const cacheKey = `${(order.wilaya ?? "").trim()}|||${(order.commune ?? "").trim()}`;
+    let resolved = territoryCache.get(cacheKey);
+    if (!resolved) {
+      const r = await resolveCityDistrictGuidsForOrder(
         order.wilaya ?? "",
-        order.commune ?? ""
+        order.commune,
+        xTenantId,
+        company.secret_key
       );
-      if (!mapped.cityTerritoryId) {
-        mappingErrors.push(
-          `Order ${order.id}: no CityTerritoryId mapping for wilaya "${order.wilaya}".`
-        );
+      if (!r.ok) {
+        mappingErrors.push(`Order ${order.id}: ${r.error}`);
         continue;
       }
-      if (!mapped.districtTerritoryId) {
-        mappingErrors.push(
-          `Order ${order.id}: no DistrictTerritoryId mapping for commune "${order.commune ?? ""}" (wilaya "${order.wilaya}").`
-        );
-        continue;
-      }
-      territoryByOrder.set(order.id, {
-        cityTerritoryId: mapped.cityTerritoryId,
-        districtTerritoryId: mapped.districtTerritoryId,
-      });
+      resolved = {
+        cityTerritoryId: r.cityTerritoryId,
+        districtTerritoryId: r.districtTerritoryId,
+      };
+      territoryCache.set(cacheKey, resolved);
     }
-    return { territoryByOrder, mappingErrors };
-  }
-
-  let mappedRows: StoredTerritory[];
-  try {
-    mappedRows = await loadStoredTerritories();
-  } catch (e) {
-    res.status(500).json({
-      error: `Failed to read ZR territories from Supabase: ${e instanceof Error ? e.message : String(e)}`,
-      zrStep: "territory_read_store",
-    });
-    return;
-  }
-  if (mappedRows.length === 0) {
-    res.status(400).json({
-      error:
-        "ZR territories are empty. Sync could not find any city/district data from ZR Express for this account.",
-      zrStep: "territory_mapping",
-    });
-    return;
-  }
-
-  let { territoryByOrder, mappingErrors } = await mapOrdersToTerritories(mappedRows);
-
-  if (mappingErrors.length > 0) {
-    // Retry once after a fresh full sync to capture newly available territories.
-    const retrySync = await syncZrTerritoriesForCompany(db, {
-      id: company.id,
-      tenant_id: xTenantId,
-      secret_key: company.secret_key,
-    });
-    if (retrySync.ok) {
-      try {
-        mappedRows = await loadStoredTerritories();
-        ({ territoryByOrder, mappingErrors } = await mapOrdersToTerritories(
-          mappedRows
-        ));
-      } catch {
-        // keep original mapping errors
-      }
-    }
+    territoryByOrder.set(order.id, resolved);
   }
 
   if (mappingErrors.length > 0) {
     res.status(400).json({
       error:
-        "Shipment validation failed: missing territory mapping for one or more orders. Please fix Wilaya/Commune values or sync ZR territories.",
+        "Shipment validation failed: could not resolve ZR territory GUIDs for one or more orders. Check wilaya and commune names against ZR Express.",
       details: mappingErrors,
       zrStep: "territory_mapping",
     });
@@ -828,7 +600,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       zrProd
     );
   });
-  const zrUrl = `${ZR_BASE}/api/v1/parcels/bulk`;
+  const zrPath = "/parcels/bulk";
   const requestBody = JSON.stringify({ parcels });
 
   let bulkOutcome: Awaited<ReturnType<typeof zrRequestWithAuthVariants>>;
@@ -843,7 +615,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       );
     });
     bulkOutcome = await zrRequestWithAuthVariants(
-      zrUrl,
+      zrPath,
       { method: "POST", body: requestBody },
       xTenantId,
       company.secret_key
@@ -851,13 +623,13 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error(`${LOG_PREFIX} ZR parcels bulk fetch failed`, {
-      url: zrUrl,
+      path: zrPath,
       error: msg,
     });
     res.status(502).json({
       error: `Failed to reach ZR Express parcels API: ${msg}`,
       zrStep: "parcels_bulk",
-      zrUrl,
+      zrPath,
     });
     return;
   }
@@ -943,7 +715,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     );
   }
   successWarnings.push(
-    `Territories synced: ${syncResult.cityCount} cities, ${syncResult.districtCount} districts (ZR POST /api/v1/territories/search).`
+    `Territories resolved live via ZR POST /territories/search (wilaya + commune per order).`
   );
 
   res.status(200).json({
@@ -952,14 +724,13 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     zrResultCount: results.length,
     zrAuthorizationVariant: zrAuthVariantDescription(zrAuthVariantUsed),
     zrXTenantId: xTenantId,
-    zrTerritoryListSource: "zr_territories",
-    zrHubCount: syncResult.cityCount + syncResult.districtCount,
+    zrTerritoryListSource: "zr_territories_search",
+    zrHubCount: territoryCache.size,
     zrHubsSearchOk: true,
     zrTerritoryResolutionSummary: {
       orderCount: list.length,
-      cityCount: syncResult.cityCount,
-      districtCount: syncResult.districtCount,
-      territorySyncSources: syncResult.sources,
+      distinctWilayaCommuneKeys: territoryCache.size,
+      territoryResolution: "live_zr_search",
     },
     warnings: successWarnings.length ? successWarnings : undefined,
     errors: errors.length ? errors : undefined,
