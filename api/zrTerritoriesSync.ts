@@ -18,6 +18,9 @@ export type SyncZrTerritoriesOk = {
   cityCount: number;
   districtCount: number;
   sources: string[];
+  error: undefined;
+  zrStep: undefined;
+  zrStatus: undefined;
 };
 
 export type SyncZrTerritoriesErr = {
@@ -25,6 +28,9 @@ export type SyncZrTerritoriesErr = {
   error: string;
   zrStep: string;
   zrStatus?: number;
+  cityCount?: undefined;
+  districtCount?: undefined;
+  sources?: undefined;
 };
 
 export type SyncZrTerritoriesResult = SyncZrTerritoriesOk | SyncZrTerritoriesErr;
@@ -174,7 +180,7 @@ async function getZrTerritoryList(
   | { ok: true; items: Record<string, unknown>[] }
   | { ok: false; error: string; zrStatus: number; zrStep: string }
 > {
-  const url = `${ZR_BASE}/api/territories/${kind}?company_id=${encodeURIComponent(companyId)}`;
+  const url = `${ZR_BASE}/api/v1/territories/${kind}?company_id=${encodeURIComponent(companyId)}`;
   const out = await zrRequestWithAuthVariants(
     url,
     { method: "GET" },
@@ -192,7 +198,7 @@ async function getZrTerritoryList(
   }
   const items = extractItemsArray(out.json);
   console.log(
-    `${LOG_PREFIX} GET /api/territories/${kind}?company_id=… → ${items.length} item(s)`
+    `${LOG_PREFIX} GET /api/v1/territories/${kind}?company_id=… → ${items.length} item(s)`
   );
   return { ok: true, items };
 }
@@ -251,7 +257,7 @@ export async function syncZrTerritoriesForCompany(
     return {
       ok: false,
       error:
-        "ZR territories sync returned no rows: empty or unparsable `items` from GET /api/territories/cities and GET /api/territories/districts.",
+        "ZR territories sync returned no rows: empty or unparsable `items` from GET /api/v1/territories/cities and GET /api/v1/territories/districts.",
       zrStep: "territory_sync_empty",
     };
   }
@@ -270,11 +276,14 @@ export async function syncZrTerritoriesForCompany(
 
   return {
     ok: true,
+    error: undefined,
+    zrStep: undefined,
+    zrStatus: undefined,
     cityCount: cityRows.size,
     districtCount: districtRows.size,
     sources: [
-      "GET /api/territories/cities",
-      "GET /api/territories/districts",
+      "GET /api/v1/territories/cities",
+      "GET /api/v1/territories/districts",
     ],
   };
 }

@@ -127,7 +127,7 @@ type StoredTerritory = {
 };
 
 /**
- * Match order wilaya text to a ZR city row (same data as GET /api/territories/cities).
+ * Match order wilaya text to a ZR city row (same data as GET /api/v1/territories/cities).
  * Compares against both `name` and `normalized_name`.
  */
 function wilayaMatchesCityRow(
@@ -180,7 +180,7 @@ function pickBestCityForWilaya(
 
 /**
  * Match order commune to a ZR district row scoped to the city (same as
- * GET /api/territories/districts?city_territory_id=...).
+ * GET /api/v1/territories/districts?city_territory_id=...).
  * Compares against both `name` and `normalized_name`.
  */
 function communeMatchesDistrictRow(
@@ -228,7 +228,7 @@ function pickBestDistrictForCommune(
 }
 
 /**
- * Resolve GUIDs like calling GET /api/territories/cities then GET /api/territories/districts
+ * Resolve GUIDs like calling GET /api/v1/territories/cities then GET /api/v1/territories/districts
  * with city_territory_id (in-process; same Supabase queries / rows).
  */
 function mapTerritoriesFromStore(
@@ -943,7 +943,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     );
   }
   successWarnings.push(
-    `Territories synced: ${syncResult.cityCount} cities, ${syncResult.districtCount} districts (ZR GET /api/territories/cities + /districts).`
+    `Territories synced: ${syncResult.cityCount} cities, ${syncResult.districtCount} districts (ZR GET /api/v1/territories/cities + /districts).`
   );
 
   res.status(200).json({
