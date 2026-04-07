@@ -60,6 +60,40 @@ function orderGrandTotal(o: Order): number {
   );
 }
 
+function normalizePhoneForDedup(phone: string | null | undefined): string | null {
+  const digits = (phone ?? "").replace(/\D/g, "");
+  return digits.length > 0 ? digits : null;
+}
+
+/** Among `new` orders, same normalized phone → keep earliest `created_at` as New; mark later rows duplicated. */
+function computeNewOrderDuplicateIds(orders: Order[]): string[] {
+  const newOnes = orders.filter(
+    (o) => o.status === "new" && o.sub_status == null
+  );
+  const byPhone = new Map<string, Order[]>();
+  for (const o of newOnes) {
+    const k = normalizePhoneForDedup(o.phone);
+    if (!k) continue;
+    const list = byPhone.get(k) ?? [];
+    list.push(o);
+    byPhone.set(k, list);
+  }
+  const toMark: string[] = [];
+  for (const list of byPhone.values()) {
+    if (list.length < 2) continue;
+    list.sort((a, b) => {
+      const ta = new Date(a.created_at).getTime();
+      const tb = new Date(b.created_at).getTime();
+      if (ta !== tb) return ta - tb;
+      return a.id.localeCompare(b.id);
+    });
+    for (let i = 1; i < list.length; i++) {
+      toMark.push(list[i].id);
+    }
+  }
+  return toMark;
+}
+
 function formatCreatedColumnDate(iso: string) {
   const d = new Date(iso);
   const y = d.getFullYear();
@@ -160,12 +194,44 @@ export function OrdersDashboard() {
       .from("orders")
       .select("*")
       .order("created_at", { ascending: false });
-    setLoading(false);
     if (qErr) {
+      setLoading(false);
       setError(qErr.message);
       return;
     }
-    setOrders((data ?? []) as Order[]);
+    const rows = (data ?? []) as Order[];
+    const dupIds = computeNewOrderDuplicateIds(rows);
+    if (dupIds.length > 0) {
+      const results = await Promise.all(
+        dupIds.map((id) =>
+          supabase
+            .from("orders")
+            .update({ status: "cancelled", sub_status: "duplicated" })
+            .eq("id", id)
+        )
+      );
+      const failed = results.find((r) => r.error);
+      if (failed?.error) {
+        setLoading(false);
+        setError(failed.error.message);
+        setOrders(rows);
+        return;
+      }
+      const { data: fresh, error: q2 } = await supabase
+        .from("orders")
+        .select("*")
+        .order("created_at", { ascending: false });
+      setLoading(false);
+      if (q2) {
+        setError(q2.message);
+        setOrders(rows);
+        return;
+      }
+      setOrders((fresh ?? []) as Order[]);
+      return;
+    }
+    setLoading(false);
+    setOrders(rows);
   }, []);
 
   const loadFilterPicklists = useCallback(async () => {
@@ -1544,6 +1610,41 @@ function statusBadgeClass(status: OrderStatus): string {
   }
 }
 
+function inlineStatusBadgeClass(o: Order): string {
+  if (o.status === "completed") {
+    if (o.sub_status === "delivered") return "bg-emerald-600 text-white";
+    if (o.sub_status === "returned") return "bg-red-600 text-white";
+    return "bg-teal-600 text-white";
+  }
+  if (o.status === "cancelled") {
+    if (o.sub_status === "duplicated") {
+      return "bg-amber-500 text-slate-900";
+    }
+    return "bg-red-600 text-white";
+  }
+  return statusBadgeClass(o.status);
+}
+
+function inlineSelectChevronStroke(o: Order): string {
+  if (o.status === "follow") return "%231e293b";
+  if (o.status === "cancelled" && o.sub_status === "duplicated") {
+    return "%231e293b";
+  }
+  return "%23ffffff";
+}
+
+function inlineCurrentOptionLabel(o: Order): string {
+  if (o.status === "completed" && o.sub_status != null) {
+    return subStatusLabel(o.sub_status);
+  }
+  if (o.status === "cancelled") {
+    if (o.sub_status === "cancelled") return "Cancelled";
+    if (o.sub_status != null) return subStatusLabel(o.sub_status);
+    return "Cancelled";
+  }
+  return fullStatusLine(o);
+}
+
 /** Inline status choices when the row is main status Confirmed (sidebar “Confirmed”). */
 const CONFIRMED_ROW_STATUS_OPTIONS: {
   snap: OrderSnapshot;
@@ -1683,8 +1784,7 @@ function InlineOrderState({
         )
         .map((s) => ({ key: keyOf(s), snap: s }));
 
-  const chevronStroke =
-    order.status === "follow" ? "%231e293b" : "%23ffffff";
+  const chevronStroke = inlineSelectChevronStroke(order);
 
   const selectClass =
     "box-border w-full min-w-0 max-w-full cursor-pointer appearance-none rounded-lg border-0 px-2 py-1.5 pr-6 text-left text-xs font-semibold leading-snug outline-none shadow-sm focus:ring-2 focus:ring-white/40 disabled:cursor-not-allowed disabled:opacity-50";
@@ -1704,7 +1804,7 @@ function InlineOrderState({
         };
         onApply(next);
       }}
-      className={`${selectClass} ${statusBadgeClass(order.status)}`}
+      className={`${selectClass} ${inlineStatusBadgeClass(order)}`}
       style={{
         backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='${chevronStroke}'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E")`,
         backgroundRepeat: "no-repeat",
@@ -1740,7 +1840,7 @@ function InlineOrderState({
         </>
       ) : (
         <>
-          <option value={currentKey}>{fullStatusLine(order)}</option>
+          <option value={currentKey}>{inlineCurrentOptionLabel(order)}</option>
           {transitions.map((t) => (
             <option key={t.key} value={t.key}>
               {fullStatusLine(t.snap)}
