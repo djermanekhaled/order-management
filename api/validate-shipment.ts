@@ -514,11 +514,21 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
   const territoryByOrder = new Map<
     string,
-    { cityTerritoryId: string; districtTerritoryId: string }
+    {
+      cityTerritoryId: string;
+      districtTerritoryId: string;
+      citySearchResult: unknown;
+      districtSearchResult: unknown;
+    }
   >();
   const territoryCache = new Map<
     string,
-    { cityTerritoryId: string; districtTerritoryId: string }
+    {
+      cityTerritoryId: string;
+      districtTerritoryId: string;
+      citySearchResult: unknown;
+      districtSearchResult: unknown;
+    }
   >();
   const mappingErrors: string[] = [];
 
@@ -530,8 +540,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         order.wilaya ?? "",
         order.commune,
         xTenantId,
-        company.secret_key,
-        { orderId: order.id }
+        company.secret_key
       );
       if (!r.ok) {
         mappingErrors.push(`Order ${order.id}: ${r.error}`);
@@ -540,6 +549,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       resolved = {
         cityTerritoryId: r.cityTerritoryId,
         districtTerritoryId: r.districtTerritoryId,
+        citySearchResult: r.citySearchResult,
+        districtSearchResult: r.districtSearchResult,
       };
       territoryCache.set(cacheKey, resolved);
     }
@@ -592,29 +603,33 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
   }
 
+  for (const order of list) {
+    const t = territoryByOrder.get(order.id)!;
+    const cityTerritoryId = t.cityTerritoryId;
+    const districtTerritoryId = t.districtTerritoryId;
+    const citySearchResult = t.citySearchResult;
+    const districtSearchResult = t.districtSearchResult;
+    console.log("ORDER WILAYA:", order.wilaya);
+    console.log("ORDER COMMUNE:", order.commune);
+    console.log("CITY SEARCH RESULT:", JSON.stringify(citySearchResult));
+    console.log("DISTRICT SEARCH RESULT:", JSON.stringify(districtSearchResult));
+    console.log("FINAL CityTerritoryId:", cityTerritoryId);
+    console.log("FINAL DistrictTerritoryId:", districtTerritoryId);
+  }
+
   const parcels = list.map((order) => {
     const kw = order.product.trim();
     const zrProd = zrProductCacheByKeyword.get(kw)!;
+    const t = territoryByOrder.get(order.id)!;
     return buildZrParcel(
       order,
-      territoryByOrder.get(order.id)!,
+      {
+        cityTerritoryId: t.cityTerritoryId,
+        districtTerritoryId: t.districtTerritoryId,
+      },
       zrProd
     );
   });
-
-  for (const order of list) {
-    const t = territoryByOrder.get(order.id)!;
-    console.log(
-      `${LOG_PREFIX} Before parcels/bulk — values sent on shipment`,
-      {
-        orderId: order.id,
-        wilaya: order.wilaya,
-        commune: order.commune,
-        cityTerritoryId: t.cityTerritoryId,
-        districtTerritoryId: t.districtTerritoryId,
-      }
-    );
-  }
 
   const zrPath = "/parcels/bulk";
   const requestBody = JSON.stringify({ parcels });
