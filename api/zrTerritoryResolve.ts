@@ -319,16 +319,23 @@ function parsedDistrictsUnderCity(
 /**
  * Resolve ZR city and district GUIDs for a shipment using POST /territories/search
  * (wilaya → city, commune → district scoped to that city).
+ *
+ * Pass `debugContext.orderId` to correlate server logs with each order.
  */
 export async function resolveCityDistrictGuidsForOrder(
   wilaya: string,
   commune: string | null | undefined,
   tenantId: string,
-  secretKey: string
+  secretKey: string,
+  debugContext?: { orderId?: string }
 ): Promise<
   | { ok: true; cityTerritoryId: string; districtTerritoryId: string }
   | { ok: false; error: string }
 > {
+  const dbgTag = debugContext?.orderId
+    ? `orderId=${debugContext.orderId}`
+    : "orderId=(none)";
+
   const communeT = (commune ?? "").trim();
   if (!communeT) {
     return { ok: false, error: "Commune is required to resolve district territory." };
@@ -337,6 +344,11 @@ export async function resolveCityDistrictGuidsForOrder(
   if (!wTrim) {
     return { ok: false, error: "Wilaya is empty." };
   }
+
+  console.log(`${LOG_PREFIX} [${dbgTag}] (1) Order wilaya & commune`, {
+    wilaya: wTrim,
+    commune: communeT,
+  });
 
   const tryKeywords = [
     ...new Set(
@@ -362,6 +374,14 @@ export async function resolveCityDistrictGuidsForOrder(
       };
     }
     wilayaItems = res.items;
+    console.log(
+      `${LOG_PREFIX} [${dbgTag}] (2) ZR city search — POST /territories/search (wilaya keyword)`,
+      {
+        keyword,
+        itemCount: res.items.length,
+        items: res.items,
+      }
+    );
     const cities = parsedCitiesFromItems(res.items);
     city = pickBestCityForWilaya(cities, wTrim);
     if (city) break;
@@ -388,6 +408,15 @@ export async function resolveCityDistrictGuidsForOrder(
     };
   }
 
+  console.log(
+    `${LOG_PREFIX} [${dbgTag}] (3) ZR district search — POST /territories/search (commune keyword)`,
+    {
+      keyword: communeT,
+      itemCount: communeSearch.items.length,
+      items: communeSearch.items,
+    }
+  );
+
   let districtCandidates = parsedDistrictsUnderCity(communeSearch.items, cityId);
 
   if (districtCandidates.length === 0) {
@@ -401,6 +430,11 @@ export async function resolveCityDistrictGuidsForOrder(
       error: `No ZR district matched commune "${communeT}" under wilaya "${wTrim}" (city territory ${cityId}).`,
     };
   }
+
+  console.log(`${LOG_PREFIX} [${dbgTag}] (4) Resolved territory GUIDs (used for parcel)`, {
+    cityTerritoryId: cityId,
+    districtTerritoryId: district.territory_id,
+  });
 
   return {
     ok: true,

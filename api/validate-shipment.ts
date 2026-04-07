@@ -530,7 +530,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         order.wilaya ?? "",
         order.commune,
         xTenantId,
-        company.secret_key
+        company.secret_key,
+        { orderId: order.id }
       );
       if (!r.ok) {
         mappingErrors.push(`Order ${order.id}: ${r.error}`);
@@ -600,6 +601,21 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       zrProd
     );
   });
+
+  for (const order of list) {
+    const t = territoryByOrder.get(order.id)!;
+    console.log(
+      `${LOG_PREFIX} Before parcels/bulk — values sent on shipment`,
+      {
+        orderId: order.id,
+        wilaya: order.wilaya,
+        commune: order.commune,
+        cityTerritoryId: t.cityTerritoryId,
+        districtTerritoryId: t.districtTerritoryId,
+      }
+    );
+  }
+
   const zrPath = "/parcels/bulk";
   const requestBody = JSON.stringify({ parcels });
 
