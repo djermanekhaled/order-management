@@ -129,18 +129,20 @@ export async function resolveCityDistrictGuidsForOrder(
   commune: string | null | undefined,
   tenantId: string
 ): Promise<ResolveCityDistrictOk | { ok: false; error: string }> {
+  const wilayaName = cleanWilaya(wilaya);
+  console.log("DEBUG - territory search starting for wilaya:", wilayaName);
+
   const communeT = (commune ?? "").trim();
   if (!communeT) {
     return { ok: false, error: "Commune is required to resolve district territory." };
   }
-  const wilayaNameFromOrder = cleanWilaya(wilaya);
-  if (!wilayaNameFromOrder) {
+  if (!wilayaName) {
     return { ok: false, error: "Wilaya is empty." };
   }
 
   const wilayaRes = await postTerritoriesSearch(
     tenantId,
-    bodyWilayaSearch(wilayaNameFromOrder)
+    bodyWilayaSearch(wilayaName)
   );
   if (!wilayaRes.ok) {
     return {
@@ -154,7 +156,7 @@ export async function resolveCityDistrictGuidsForOrder(
   if (!cityTerritoryId) {
     return {
       ok: false,
-      error: `No wilaya territory result for "${wilayaNameFromOrder}" (empty items or missing id).`,
+      error: `No wilaya territory result for "${wilayaName}" (empty items or missing id).`,
     };
   }
 

@@ -616,19 +616,35 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
   }
 
-  for (const order of list) {
-    const t = territoryByOrder.get(order.id)!;
-    const cityTerritoryId = t.cityTerritoryId;
-    const districtTerritoryId = t.districtTerritoryId;
-    const citySearchResponse = t.citySearchResult;
-    const districtSearchResponse = t.districtSearchResult;
-    const cleanedWilaya = cleanWilaya(order.wilaya ?? "");
-    console.log("CLEANED WILAYA:", cleanedWilaya);
-    console.log("CITY SEARCH RESPONSE:", JSON.stringify(citySearchResponse));
-    console.log("FOUND cityTerritoryId:", cityTerritoryId);
-    console.log("CLEANED COMMUNE:", order.commune);
-    console.log("DISTRICT SEARCH RESPONSE:", JSON.stringify(districtSearchResponse));
-    console.log("FOUND districtTerritoryId:", districtTerritoryId);
+  try {
+    for (const order of list) {
+      const t = territoryByOrder.get(order.id)!;
+      const cityTerritoryId = t.cityTerritoryId;
+      const districtTerritoryId = t.districtTerritoryId;
+      const citySearchResponse = t.citySearchResult;
+      const districtSearchResponse = t.districtSearchResult;
+      const cleanedWilaya = cleanWilaya(order.wilaya ?? "");
+      console.log("CLEANED WILAYA:", cleanedWilaya);
+      console.log("CITY SEARCH RESPONSE:", JSON.stringify(citySearchResponse));
+      console.log("FOUND cityTerritoryId:", cityTerritoryId);
+      console.log("CLEANED COMMUNE:", order.commune);
+      console.log("DISTRICT SEARCH RESPONSE:", JSON.stringify(districtSearchResponse));
+      console.log("FOUND districtTerritoryId:", districtTerritoryId);
+      console.log("DEBUG BEFORE BULK - cityTerritoryId:", cityTerritoryId);
+      console.log("DEBUG BEFORE BULK - districtTerritoryId:", districtTerritoryId);
+      if (!cityTerritoryId || !districtTerritoryId) {
+        throw new Error(
+          `Territory GUIDs missing - city: ${cityTerritoryId}, district: ${districtTerritoryId}`
+        );
+      }
+    }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    res.status(500).json({
+      error: msg,
+      zrStep: "territory_pre_bulk",
+    });
+    return;
   }
 
   const parcels = list.map((order) => {
