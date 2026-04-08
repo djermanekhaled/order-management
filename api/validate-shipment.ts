@@ -536,39 +536,27 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       districtSearchResult: unknown;
     }
   >();
-  const territoryCache = new Map<
-    string,
-    {
-      cityTerritoryId: string;
-      districtTerritoryId: string;
-      citySearchResult: unknown;
-      districtSearchResult: unknown;
-    }
-  >();
+  territoryByOrder.clear();
+  console.log("CACHE CLEARED - starting fresh territory lookup");
+
   const mappingErrors: string[] = [];
 
   for (const order of list) {
-    const cacheKey = `${(order.wilaya ?? "").trim()}|||${(order.commune ?? "").trim()}`;
-    let resolved = territoryCache.get(cacheKey);
-    if (!resolved) {
-      const r = await resolveCityDistrictGuidsForOrder(
-        order.wilaya ?? "",
-        order.commune,
-        xTenantId
-      );
-      if (!r.ok) {
-        mappingErrors.push(`Order ${order.id}: ${r.error}`);
-        continue;
-      }
-      resolved = {
-        cityTerritoryId: r.cityTerritoryId,
-        districtTerritoryId: r.districtTerritoryId,
-        citySearchResult: r.citySearchResult,
-        districtSearchResult: r.districtSearchResult,
-      };
-      territoryCache.set(cacheKey, resolved);
+    const r = await resolveCityDistrictGuidsForOrder(
+      order.wilaya ?? "",
+      order.commune,
+      xTenantId
+    );
+    if (!r.ok) {
+      mappingErrors.push(`Order ${order.id}: ${r.error}`);
+      continue;
     }
-    territoryByOrder.set(order.id, resolved);
+    territoryByOrder.set(order.id, {
+      cityTerritoryId: r.cityTerritoryId,
+      districtTerritoryId: r.districtTerritoryId,
+      citySearchResult: r.citySearchResult,
+      districtSearchResult: r.districtSearchResult,
+    });
   }
 
   if (mappingErrors.length > 0) {
@@ -785,11 +773,16 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     zrAuthorizationVariant: zrAuthVariantDescription(zrAuthVariantUsed),
     zrXTenantId: xTenantId,
     zrTerritoryListSource: "zr_territories_search",
-    zrHubCount: territoryCache.size,
+    zrHubCount: territoryByOrder.size,
     zrHubsSearchOk: true,
     zrTerritoryResolutionSummary: {
       orderCount: list.length,
-      distinctWilayaCommuneKeys: territoryCache.size,
+      distinctWilayaCommuneKeys: new Set(
+        list.map(
+          (o) =>
+            `${(o.wilaya ?? "").trim()}|||${(o.commune ?? "").trim()}`
+        )
+      ).size,
       territoryResolution: "live_zr_search",
     },
     warnings: successWarnings.length ? successWarnings : undefined,
