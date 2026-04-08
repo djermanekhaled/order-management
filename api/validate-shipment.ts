@@ -503,11 +503,14 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
   }
 
-  const xTenantId = company.tenant_id.trim();
+  /** ZR `X-Tenant` header: optional `ZR_TENANT_ID` env (e.g. Vercel), else `delivery_companies.tenant_id`. */
+  const xTenantId =
+    (process.env.ZR_TENANT_ID ?? "").trim() || company.tenant_id.trim();
 
   console.log(
-    `${LOG_PREFIX} Using delivery_companies.tenant_id as X-Tenant (first 10 chars):`,
-    first10LogPreview(xTenantId)
+    `${LOG_PREFIX} Using X-Tenant (first 10 chars):`,
+    first10LogPreview(xTenantId),
+    process.env.ZR_TENANT_ID ? "(from ZR_TENANT_ID)" : "(from delivery_companies.tenant_id)"
   );
 
   if (!getZrApiKeyFromEnv()) {
@@ -519,6 +522,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return;
   }
 
+  // Territories: POST /api/v1/territories/search (advancedSearch + advancedFilter, level wilaya/commune, first hit id).
+  // Implemented in api/zrTerritoryResolve.ts; uses X-Api-Key (ZR_API_KEY) and X-Tenant (see above).
   const territoryByOrder = new Map<
     string,
     {
