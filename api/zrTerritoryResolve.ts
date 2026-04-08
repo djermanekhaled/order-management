@@ -5,6 +5,9 @@ import {
 
 const LOG_PREFIX = "[zr-territory-resolve]";
 
+const cleanWilaya = (wilaya: string) =>
+  wilaya.replace(/^\d+\s*[—-]\s*/, "").trim();
+
 function isGuid(v: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     v.trim()
@@ -130,7 +133,7 @@ export async function resolveCityDistrictGuidsForOrder(
   if (!communeT) {
     return { ok: false, error: "Commune is required to resolve district territory." };
   }
-  const wilayaNameFromOrder = wilaya.trim();
+  const wilayaNameFromOrder = cleanWilaya(wilaya);
   if (!wilayaNameFromOrder) {
     return { ok: false, error: "Wilaya is empty." };
   }
