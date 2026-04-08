@@ -217,7 +217,7 @@ function buildZrParcel(
 function extractResultArray(data: unknown): unknown[] {
   if (!data || typeof data !== "object") return [];
   const d = data as Record<string, unknown>;
-  for (const key of ["data", "parcels", "results", "items"]) {
+  for (const key of ["successes", "data", "parcels", "results", "items"]) {
     const v = d[key];
     if (Array.isArray(v)) return v;
   }
@@ -266,6 +266,27 @@ function referenceFromResult(item: unknown): string | null {
       const v = n[k];
       if (typeof v === "string" && v.trim()) return v.trim();
     }
+  }
+  return null;
+}
+
+/** ZR `CreateBulkParcelsResponse.successes[]` includes `parcelId` (uuid). */
+function zrParcelIdFromResult(item: unknown): string | null {
+  if (!item || typeof item !== "object") return null;
+  const o = item as Record<string, unknown>;
+  const direct = o.parcelId ?? o.parcel_id;
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
+  const nested = o.parcel ?? o.data ?? o.result;
+  if (nested && typeof nested === "object") {
+    const n = nested as Record<string, unknown>;
+    const np = n.parcelId ?? n.parcel_id ?? n.id;
+    if (typeof np === "string" && np.trim()) return np.trim();
+  }
+  const topId = o.id;
+  if (typeof topId === "string" && topId.trim()) {
+    const tid = topId.trim();
+    const ext = referenceFromResult(item);
+    if (!ext || tid !== ext) return tid;
   }
   return null;
 }
@@ -709,29 +730,43 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
   const results = extractResultArray(zrJson);
   const trackingByOrderId = new Map<string, string>();
+  const zrParcelIdByOrderId = new Map<string, string>();
 
   for (let i = 0; i < list.length; i++) {
     const order = list[i];
     let track: string | null = null;
+    let parcelId: string | null = null;
     const r = results[i];
     if (r !== undefined) {
       track = trackingFromResult(r);
+      parcelId = zrParcelIdFromResult(r);
       const ref = referenceFromResult(r);
       if (ref && ref !== order.id) {
         const byRef = results.find(
           (x) => referenceFromResult(x) === order.id
         );
-        if (byRef) track = trackingFromResult(byRef);
+        if (byRef) {
+          track = trackingFromResult(byRef);
+          parcelId = zrParcelIdFromResult(byRef);
+        }
       }
     }
     if (!track && results.length === list.length) {
       track = trackingFromResult(results[i]);
     }
+    if (!parcelId && results.length === list.length) {
+      parcelId = zrParcelIdFromResult(results[i]);
+    }
     if (!track && results.length > 0) {
       const byRef = results.find((x) => referenceFromResult(x) === order.id);
       if (byRef) track = trackingFromResult(byRef);
     }
+    if (!parcelId && results.length > 0) {
+      const byRef = results.find((x) => referenceFromResult(x) === order.id);
+      if (byRef) parcelId = zrParcelIdFromResult(byRef);
+    }
     if (track) trackingByOrderId.set(order.id, track);
+    if (parcelId) zrParcelIdByOrderId.set(order.id, parcelId);
   }
 
   const errors: string[] = [];
@@ -739,16 +774,16 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
   for (const order of list) {
     const tracking = trackingByOrderId.get(order.id) ?? "";
-    const { error: uErr } = await db
-      .from("orders")
-      .update({
-        status: "follow",
-        sub_status: "confirmed",
-        delivery_company: company.name,
-        tracking_number: tracking,
-        shipping_status: tracking ? "zr_validated" : "zr_submitted",
-      })
-      .eq("id", order.id);
+    const zrParcelId = zrParcelIdByOrderId.get(order.id);
+    const row: Record<string, unknown> = {
+      status: "follow",
+      sub_status: "confirmed",
+      delivery_company: company.name,
+      tracking_number: tracking,
+      shipping_status: tracking ? "zr_validated" : "zr_submitted",
+    };
+    if (zrParcelId) row.zr_parcel_id = zrParcelId;
+    const { error: uErr } = await db.from("orders").update(row).eq("id", order.id);
     if (uErr) {
       errors.push(`${order.id}: ${uErr.message}`);
       continue;

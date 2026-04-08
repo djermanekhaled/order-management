@@ -10,6 +10,31 @@ interface DeliveryCompaniesPageProps {
   onCompaniesChanged?: () => void;
 }
 
+function appApiUrl(path: string): string {
+  const o = import.meta.env.VITE_API_ORIGIN;
+  if (typeof o === "string" && o.trim()) {
+    return `${o.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+  }
+  return path.startsWith("/") ? path : `/${path}`;
+}
+
+async function registerZrWebhookForCompany(deliveryCompanyId: string): Promise<void> {
+  const url = appApiUrl("/api/register-zr-webhook");
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ deliveryCompanyId }),
+  });
+  const data = (await res.json().catch(() => ({}))) as { error?: string };
+  if (!res.ok) {
+    throw new Error(
+      typeof data.error === "string" && data.error.trim()
+        ? data.error
+        : `Webhook registration failed (${res.status})`
+    );
+  }
+}
+
 export function DeliveryCompaniesPage({
   companyModalOpen,
   onCompanyModalOpen,
@@ -44,30 +69,48 @@ export function DeliveryCompaniesPage({
     secret_key: string;
     tenant_id: string;
   }) {
-    const { error: insErr } = await supabase.from("delivery_companies").insert({
-      name: row.name,
-      secret_key: row.secret_key,
-      tenant_id: row.tenant_id,
-      type: "zr_express",
-      active: true,
-    });
+    const { data: inserted, error: insErr } = await supabase
+      .from("delivery_companies")
+      .insert({
+        name: row.name,
+        secret_key: row.secret_key,
+        tenant_id: row.tenant_id,
+        type: "zr_express",
+        active: true,
+      })
+      .select("id")
+      .single();
     if (insErr) throw new Error(insErr.message);
     await loadCompanies();
     onCompaniesChanged?.();
+    if (inserted?.id) {
+      try {
+        await registerZrWebhookForCompany(inserted.id);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "ZR webhook registration failed");
+      }
+    }
   }
 
-  async function toggleActive(id: string, next: boolean) {
+  async function toggleActive(c: DeliveryCompany, next: boolean) {
     setError(null);
     const { error: upErr } = await supabase
       .from("delivery_companies")
       .update({ active: next })
-      .eq("id", id);
+      .eq("id", c.id);
     if (upErr) {
       setError(upErr.message);
       return;
     }
     await loadCompanies();
     onCompaniesChanged?.();
+    if (next && c.type === "zr_express") {
+      try {
+        await registerZrWebhookForCompany(c.id);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "ZR webhook registration failed");
+      }
+    }
   }
 
   async function deleteCompany(c: DeliveryCompany) {
@@ -165,7 +208,7 @@ export function DeliveryCompaniesPage({
                       <div className="flex justify-end flex-wrap gap-2">
                         <button
                           type="button"
-                          onClick={() => void toggleActive(c.id, !c.active)}
+                          onClick={() => void toggleActive(c, !c.active)}
                           className="rounded-lg border border-slate-600 px-2 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
                         >
                           {c.active ? "Deactivate" : "Activate"}

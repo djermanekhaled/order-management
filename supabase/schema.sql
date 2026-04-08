@@ -33,6 +33,7 @@ create table if not exists public.orders (
   shipping_status text,
   tracking_number text not null default '',
   internal_tracking_id text not null default '',
+  zr_parcel_id text not null default '',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint orders_sub_status_check check (

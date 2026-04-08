@@ -58,6 +58,8 @@ export interface Order {
   tracking_number?: string;
   /** Internal reference (e.g. ORD-YYYYMMDD-XXXX). */
   internal_tracking_id: string;
+  /** ZR Express parcel id after bulk create (optional). */
+  zr_parcel_id?: string;
   created_at: string;
   updated_at: string;
 }
