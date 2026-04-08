@@ -35,7 +35,17 @@ type DbOrder = {
   status: string;
   sub_status: string | null;
   delivery_type: string | null;
+  shipping_status: string | null;
 };
+
+const ZR_SHIPPING_ALREADY_SUBMITTED = new Set(["zr_validated", "zr_submitted"]);
+
+function orderAlreadySubmittedToZrExpress(
+  shipping_status: string | null | undefined
+): boolean {
+  const s = (shipping_status ?? "").trim();
+  return ZR_SHIPPING_ALREADY_SUBMITTED.has(s);
+}
 
 function parseJsonBody(req: ApiRequest): unknown | null {
   const b = req.body;
@@ -498,7 +508,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   const { data: orders, error: oErr } = await db
     .from("orders")
     .select(
-      "id, customer_name, phone, wilaya, commune, address, product, quantity, amount, status, sub_status, delivery_type"
+      "id, customer_name, phone, wilaya, commune, address, product, quantity, amount, status, sub_status, delivery_type, shipping_status"
     )
     .in("id", orderIds);
 
@@ -506,9 +516,23 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     res.status(500).json({ error: oErr.message });
     return;
   }
-  const list = (orders ?? []) as DbOrder[];
-  if (list.length !== orderIds.length) {
+  const loaded = (orders ?? []) as DbOrder[];
+  if (loaded.length !== orderIds.length) {
     res.status(400).json({ error: "One or more orders were not found" });
+    return;
+  }
+
+  const alreadySubmittedOrderIds = loaded
+    .filter((o) => orderAlreadySubmittedToZrExpress(o.shipping_status))
+    .map((o) => o.id);
+  const list = loaded.filter((o) => !orderAlreadySubmittedToZrExpress(o.shipping_status));
+
+  if (list.length === 0) {
+    res.status(400).json({
+      error: "This order has already been submitted to ZR Express.",
+      zrStep: "already_submitted_zr",
+      alreadySubmittedOrderIds,
+    });
     return;
   }
 
@@ -792,6 +816,14 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   }
 
   const successWarnings: string[] = [];
+  if (alreadySubmittedOrderIds.length > 0) {
+    successWarnings.push(
+      "This order has already been submitted to ZR Express."
+    );
+    successWarnings.push(
+      `Skipped ${alreadySubmittedOrderIds.length} order(s) already on ZR Express (shipping_status zr_validated or zr_submitted).`
+    );
+  }
   if (results.length === 0) {
     successWarnings.push(
       "ZR response had no parcel array; check API payload/response shape in api/validate-shipment.ts"
@@ -822,5 +854,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     },
     warnings: successWarnings.length ? successWarnings : undefined,
     errors: errors.length ? errors : undefined,
+    alreadySubmittedOrderIds:
+      alreadySubmittedOrderIds.length > 0 ? alreadySubmittedOrderIds : undefined,
   });
 }
