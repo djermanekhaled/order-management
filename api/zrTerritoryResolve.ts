@@ -119,6 +119,10 @@ export type ResolveCityDistrictOk = {
   districtSearchResult: Record<string, unknown>[];
 };
 
+function logTerritoryResolveReturn(result: unknown): void {
+  console.log("TERRITORY RESOLVE RETURNING:", JSON.stringify(result));
+}
+
 /**
  * POST https://api.zrexpress.app/api/v1/territories/search with X-Api-Key + X-Tenant.
  * Wilaya: advancedSearch keyword + level eq wilaya → first item id = cityTerritoryId.
@@ -129,15 +133,34 @@ export async function resolveCityDistrictGuidsForOrder(
   commune: string | null | undefined,
   tenantId: string
 ): Promise<ResolveCityDistrictOk | { ok: false; error: string }> {
+  console.log(
+    "TERRITORY RESOLVE CALLED - wilaya:",
+    wilaya,
+    "commune:",
+    commune
+  );
+  console.log("TERRITORY RESOLVE - xTenantId:", tenantId);
+  console.log(
+    "TERRITORY RESOLVE - ZR_API_KEY exists:",
+    !!process.env.ZR_API_KEY
+  );
+
   const wilayaName = cleanWilaya(wilaya);
   console.log("DEBUG - territory search starting for wilaya:", wilayaName);
 
   const communeT = (commune ?? "").trim();
   if (!communeT) {
-    return { ok: false, error: "Commune is required to resolve district territory." };
+    const result = {
+      ok: false as const,
+      error: "Commune is required to resolve district territory.",
+    };
+    logTerritoryResolveReturn(result);
+    return result;
   }
   if (!wilayaName) {
-    return { ok: false, error: "Wilaya is empty." };
+    const result = { ok: false as const, error: "Wilaya is empty." };
+    logTerritoryResolveReturn(result);
+    return result;
   }
 
   const wilayaRes = await postTerritoriesSearch(
@@ -145,19 +168,23 @@ export async function resolveCityDistrictGuidsForOrder(
     bodyWilayaSearch(wilayaName)
   );
   if (!wilayaRes.ok) {
-    return {
-      ok: false,
+    const result = {
+      ok: false as const,
       error: `ZR territories/search (wilaya): ${wilayaRes.error}`,
     };
+    logTerritoryResolveReturn(result);
+    return result;
   }
 
   const citySearchResult = wilayaRes.items;
   const cityTerritoryId = firstResultId(citySearchResult);
   if (!cityTerritoryId) {
-    return {
-      ok: false,
+    const result = {
+      ok: false as const,
       error: `No wilaya territory result for "${wilayaName}" (empty items or missing id).`,
     };
+    logTerritoryResolveReturn(result);
+    return result;
   }
 
   const communeRes = await postTerritoriesSearch(
@@ -165,26 +192,32 @@ export async function resolveCityDistrictGuidsForOrder(
     bodyCommuneSearch(communeT, cityTerritoryId)
   );
   if (!communeRes.ok) {
-    return {
-      ok: false,
+    const result = {
+      ok: false as const,
       error: `ZR territories/search (commune): ${communeRes.error}`,
     };
+    logTerritoryResolveReturn(result);
+    return result;
   }
 
   const districtSearchResult = communeRes.items;
   const districtTerritoryId = firstResultId(districtSearchResult);
   if (!districtTerritoryId) {
-    return {
-      ok: false,
+    const result = {
+      ok: false as const,
       error: `No commune territory result for "${communeT}" under wilaya territory ${cityTerritoryId} (empty items or missing id).`,
     };
+    logTerritoryResolveReturn(result);
+    return result;
   }
 
-  return {
+  const result: ResolveCityDistrictOk = {
     ok: true,
     cityTerritoryId,
     districtTerritoryId,
     citySearchResult,
     districtSearchResult,
   };
+  logTerritoryResolveReturn(result);
+  return result;
 }
