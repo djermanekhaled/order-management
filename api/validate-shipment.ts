@@ -194,10 +194,10 @@ function buildZrParcel(
       name: order.customer_name,
       phone: { number1: formatDzPhoneNumber1(order.phone || "") },
     },
-    cityTerritoryId: territory.cityTerritoryId,
-    districtTerritoryId: territory.districtTerritoryId,
     deliveryAddress: {
       street: order.address || "",
+      cityTerritoryId: territory.cityTerritoryId,
+      districtTerritoryId: territory.districtTerritoryId,
     },
     orderedProducts: [
       {
