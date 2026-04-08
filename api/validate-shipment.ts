@@ -8,7 +8,10 @@ import {
   zrExpressErrorMessage,
   zrRequestWithAuthVariants,
 } from "./zrExpressClient.js";
-import { resolveCityDistrictGuidsForOrder } from "./zrTerritoryResolve.js";
+import {
+  cleanWilaya,
+  resolveCityDistrictGuidsForOrder,
+} from "./zrTerritoryResolve.js";
 
 type ApiRequest = IncomingMessage & {
   query?: Record<string, string | string[] | undefined>;
@@ -617,14 +620,15 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const t = territoryByOrder.get(order.id)!;
     const cityTerritoryId = t.cityTerritoryId;
     const districtTerritoryId = t.districtTerritoryId;
-    const citySearchResult = t.citySearchResult;
-    const districtSearchResult = t.districtSearchResult;
-    console.log("ORDER WILAYA:", order.wilaya);
-    console.log("ORDER COMMUNE:", order.commune);
-    console.log("CITY SEARCH RESULT:", JSON.stringify(citySearchResult));
-    console.log("DISTRICT SEARCH RESULT:", JSON.stringify(districtSearchResult));
-    console.log("FINAL CityTerritoryId:", cityTerritoryId);
-    console.log("FINAL DistrictTerritoryId:", districtTerritoryId);
+    const citySearchResponse = t.citySearchResult;
+    const districtSearchResponse = t.districtSearchResult;
+    const cleanedWilaya = cleanWilaya(order.wilaya ?? "");
+    console.log("CLEANED WILAYA:", cleanedWilaya);
+    console.log("CITY SEARCH RESPONSE:", JSON.stringify(citySearchResponse));
+    console.log("FOUND cityTerritoryId:", cityTerritoryId);
+    console.log("CLEANED COMMUNE:", order.commune);
+    console.log("DISTRICT SEARCH RESPONSE:", JSON.stringify(districtSearchResponse));
+    console.log("FOUND districtTerritoryId:", districtTerritoryId);
   }
 
   const parcels = list.map((order) => {

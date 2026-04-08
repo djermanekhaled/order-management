@@ -5,7 +5,7 @@ import {
 
 const LOG_PREFIX = "[zr-territory-resolve]";
 
-const cleanWilaya = (wilaya: string) =>
+export const cleanWilaya = (wilaya: string) =>
   wilaya.replace(/^\d+\s*[—-]\s*/, "").trim();
 
 function isGuid(v: string): boolean {
