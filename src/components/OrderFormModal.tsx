@@ -1,4 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  ALGERIA_WILAYAS_58,
+  formatWilayaLabel58,
+  parseWilayaCodeFromLabel,
+} from "../constants/algeriaWilayas58";
 import { supabase } from "../lib/supabase";
 import { isValidOrderState } from "../lib/orderWorkflow";
 import { generateInternalTrackingId } from "../lib/internalTracking";
@@ -106,6 +111,11 @@ export function OrderFormModal({
   const [communesLoading, setCommunesLoading] = useState(false);
   const [territoryListsError, setTerritoryListsError] = useState<string | null>(null);
   const [picklistsLoading, setPicklistsLoading] = useState(false);
+  const [algeriaCommunesRows, setAlgeriaCommunesRows] = useState<
+    { wilaya_code: string; name: string }[] | null
+  >(null);
+  const [algeriaCommunesLoading, setAlgeriaCommunesLoading] = useState(false);
+  const [algeriaCommunesError, setAlgeriaCommunesError] = useState<string | null>(null);
   const didMatchLegacyWilaya = useRef(false);
   const didMatchLegacyCommune = useRef(false);
   const prevZrCompanyIdForTerritories = useRef<string | null>(null);
@@ -178,6 +188,33 @@ export function OrderFormModal({
     };
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setAlgeriaCommunesLoading(true);
+    setAlgeriaCommunesError(null);
+    void fetch(`${import.meta.env.BASE_URL}data/algeria_communes.json`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json() as Promise<{ wilaya_code: string; name: string }[]>;
+      })
+      .then((rows) => {
+        if (!cancelled) setAlgeriaCommunesRows(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAlgeriaCommunesRows([]);
+          setAlgeriaCommunesError("Could not load commune list.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setAlgeriaCommunesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
   /** Only when the selected delivery company row is ZR Express (name match). */
   const zrCompanyIdForTerritories = useMemo(() => {
     const dc = (values.delivery_company ?? "").trim();
@@ -185,6 +222,49 @@ export function OrderFormModal({
     const match = zrDeliveryCompanies.find((c) => c.name === dc);
     return match?.id ?? null;
   }, [zrDeliveryCompanies, values.delivery_company]);
+
+  const locationInputMode = useMemo((): "zr" | "domestic" | "other" => {
+    if (zrCompanyIdForTerritories) return "zr";
+    if (!(values.delivery_company ?? "").trim()) return "domestic";
+    return "other";
+  }, [zrCompanyIdForTerritories, values.delivery_company]);
+
+  const domesticWilayaCode = useMemo(
+    () => parseWilayaCodeFromLabel(values.wilaya),
+    [values.wilaya]
+  );
+
+  const domesticCommuneNames = useMemo(() => {
+    const code = domesticWilayaCode;
+    if (!code || !algeriaCommunesRows?.length) return [];
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const r of algeriaCommunesRows) {
+      if (r.wilaya_code !== code) continue;
+      const n = (r.name ?? "").trim();
+      if (!n || seen.has(n)) continue;
+      seen.add(n);
+      out.push(n);
+    }
+    out.sort((a, b) => a.localeCompare(b, "fr", { sensitivity: "base" }));
+    return out;
+  }, [domesticWilayaCode, algeriaCommunesRows]);
+
+  /** Canonical wilaya label for the domestic dropdown (accepts legacy "01 — X"). */
+  const domesticWilayaValueForSelect = useMemo(() => {
+    const code = parseWilayaCodeFromLabel(values.wilaya);
+    if (!code) return "";
+    const w = ALGERIA_WILAYAS_58.find((x) => x.code === code);
+    return w ? formatWilayaLabel58(w) : "";
+  }, [values.wilaya]);
+
+  const domesticCommuneSelectValue = useMemo(
+    () =>
+      domesticCommuneNames.includes(values.commune.trim())
+        ? values.commune.trim()
+        : "",
+    [values.commune, domesticCommuneNames]
+  );
 
   useEffect(() => {
     if (!open || zrCompanyIdForTerritories) return;
@@ -427,13 +507,27 @@ export function OrderFormModal({
       setLocalError("Customer name and product are required.");
       return;
     }
-    if (zrCompanyIdForTerritories) {
+    if (locationInputMode === "zr") {
       if (!values.wilaya_territory_id.trim() || !values.wilaya.trim()) {
         setLocalError("Please select a wilaya from the ZR Express list.");
         return;
       }
       if (!values.commune_territory_id.trim() || !values.commune.trim()) {
         setLocalError("Please select a commune from the ZR Express list.");
+        return;
+      }
+    } else if (locationInputMode === "domestic") {
+      if (!domesticWilayaValueForSelect) {
+        setLocalError("Please select a wilaya.");
+        return;
+      }
+      const com = values.commune.trim();
+      if (!com) {
+        setLocalError("Please select a commune.");
+        return;
+      }
+      if (!domesticCommuneNames.includes(com)) {
+        setLocalError("Pick a commune from the list for the selected wilaya.");
         return;
       }
     } else {
@@ -459,10 +553,14 @@ export function OrderFormModal({
         : null;
     setSaving(true);
     try {
+      const baseValues: OrderFormValues =
+        locationInputMode === "domestic" && domesticWilayaValueForSelect
+          ? { ...values, wilaya: domesticWilayaValueForSelect }
+          : values;
       const valuesToSave: OrderFormValues =
         mode === "create"
-          ? { ...values, internal_tracking_id: generateInternalTrackingId() }
-          : values;
+          ? { ...baseValues, internal_tracking_id: generateInternalTrackingId() }
+          : baseValues;
       await onSubmit(valuesToSave, prevSnap);
       onClose();
     } catch (err) {
@@ -562,10 +660,10 @@ export function OrderFormModal({
                 ))}
               </select>
               <p className="mt-1 text-xs text-slate-500">
-                Choose ZR Express here to load wilaya and commune from the ZR API.
+                None: Algerian wilaya/commune lists. ZR Express: ZR API. Other carriers: free text.
               </p>
             </div>
-            {zrCompanyIdForTerritories ? (
+            {locationInputMode === "zr" ? (
               <>
                 <div>
                   <label className="block text-sm font-medium text-slate-300">
@@ -637,6 +735,74 @@ export function OrderFormModal({
                       </option>
                     ))}
                   </select>
+                </div>
+              </>
+            ) : locationInputMode === "domestic" ? (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300">
+                    Wilaya
+                  </label>
+                  <select
+                    required
+                    value={domesticWilayaValueForSelect}
+                    disabled={picklistsLoading}
+                    onChange={(e) => {
+                      const label = e.target.value;
+                      setValues((v) => ({
+                        ...v,
+                        wilaya: label,
+                        commune: "",
+                      }));
+                    }}
+                    className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <option value="">Select wilaya</option>
+                    {ALGERIA_WILAYAS_58.map((w) => {
+                      const lab = formatWilayaLabel58(w);
+                      return (
+                        <option key={w.code} value={lab}>
+                          {lab}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300">
+                    Commune
+                  </label>
+                  <select
+                    required
+                    value={domesticCommuneSelectValue}
+                    disabled={
+                      picklistsLoading ||
+                      !domesticWilayaCode ||
+                      algeriaCommunesLoading
+                    }
+                    onChange={(e) =>
+                      setValues((v) => ({ ...v, commune: e.target.value }))
+                    }
+                    className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <option value="">
+                      {!domesticWilayaCode
+                        ? "Select a wilaya first"
+                        : algeriaCommunesLoading
+                          ? "Loading communes…"
+                          : domesticCommuneNames.length === 0
+                            ? "No communes for this wilaya"
+                            : "Select commune"}
+                    </option>
+                    {domesticCommuneNames.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                  {algeriaCommunesError && (
+                    <p className="mt-1 text-xs text-rose-300">{algeriaCommunesError}</p>
+                  )}
                 </div>
               </>
             ) : (
