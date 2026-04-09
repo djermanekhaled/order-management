@@ -8,10 +8,7 @@ import {
   zrExpressErrorMessage,
   zrRequestWithAuthVariants,
 } from "./zrExpressClient.js";
-import {
-  cleanWilaya,
-  resolveCityDistrictGuidsForOrder,
-} from "./zrTerritoryResolve.js";
+import { isZrTerritoryGuid } from "./zrTerritoryResolve.js";
 
 type ApiRequest = IncomingMessage & {
   query?: Record<string, string | string[] | undefined>;
@@ -35,6 +32,8 @@ type DbOrder = {
   status: string;
   sub_status: string | null;
   delivery_type: string | null;
+  wilaya_territory_id: string | null;
+  commune_territory_id: string | null;
 };
 
 function parseJsonBody(req: ApiRequest): unknown | null {
@@ -498,7 +497,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   const { data: orders, error: oErr } = await db
     .from("orders")
     .select(
-      "id, customer_name, phone, wilaya, commune, address, product, quantity, amount, status, sub_status, delivery_type"
+      "id, customer_name, phone, wilaya, commune, address, product, quantity, amount, status, sub_status, delivery_type, wilaya_territory_id, commune_territory_id"
     )
     .in("id", orderIds);
 
@@ -546,8 +545,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return;
   }
 
-  // Territories: POST /api/v1/territories/search (advancedSearch + advancedFilter, level wilaya/commune, first hit id).
-  // Implemented in api/zrTerritoryResolve.ts; uses X-Api-Key (ZR_API_KEY) and X-Tenant (see above).
+  /** ZR parcel build uses `orders.wilaya_territory_id` / `commune_territory_id` from the order form (no live search). */
   const territoryByOrder = new Map<
     string,
     {
@@ -557,35 +555,32 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       districtSearchResult: unknown;
     }
   >();
-  territoryByOrder.clear();
-  console.log("CACHE CLEARED - starting fresh territory lookup");
 
   const mappingErrors: string[] = [];
 
   for (const order of list) {
-    const r = await resolveCityDistrictGuidsForOrder(
-      order.wilaya ?? "",
-      order.commune,
-      xTenantId
-    );
-    if (!r.ok) {
-      mappingErrors.push(`Order ${order.id}: ${r.error}`);
+    const wId = (order.wilaya_territory_id ?? "").trim();
+    const cId = (order.commune_territory_id ?? "").trim();
+    if (!isZrTerritoryGuid(wId) || !isZrTerritoryGuid(cId)) {
+      mappingErrors.push(
+        `Order ${order.id}: missing or invalid wilaya_territory_id / commune_territory_id — edit the order and choose wilaya and commune from the ZR lists.`
+      );
       continue;
     }
     territoryByOrder.set(order.id, {
-      cityTerritoryId: r.cityTerritoryId,
-      districtTerritoryId: r.districtTerritoryId,
-      citySearchResult: r.citySearchResult,
-      districtSearchResult: r.districtSearchResult,
+      cityTerritoryId: wId,
+      districtTerritoryId: cId,
+      citySearchResult: [],
+      districtSearchResult: [],
     });
   }
 
   if (mappingErrors.length > 0) {
     res.status(400).json({
       error:
-        "Shipment validation failed: could not resolve ZR territory GUIDs for one or more orders. Check wilaya and commune names against ZR Express.",
+        "Shipment validation failed: one or more orders are missing saved ZR territory IDs.",
       details: mappingErrors,
-      zrStep: "territory_mapping",
+      zrStep: "territory_ids",
     });
     return;
   }
@@ -628,22 +623,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   try {
     for (const order of list) {
       const t = territoryByOrder.get(order.id)!;
-      const cityTerritoryId = t.cityTerritoryId;
-      const districtTerritoryId = t.districtTerritoryId;
-      const citySearchResponse = t.citySearchResult;
-      const districtSearchResponse = t.districtSearchResult;
-      const cleanedWilaya = cleanWilaya(order.wilaya ?? "");
-      console.log("CLEANED WILAYA:", cleanedWilaya);
-      console.log("CITY SEARCH RESPONSE:", JSON.stringify(citySearchResponse));
-      console.log("FOUND cityTerritoryId:", cityTerritoryId);
-      console.log("CLEANED COMMUNE:", order.commune);
-      console.log("DISTRICT SEARCH RESPONSE:", JSON.stringify(districtSearchResponse));
-      console.log("FOUND districtTerritoryId:", districtTerritoryId);
-      console.log("DEBUG BEFORE BULK - cityTerritoryId:", cityTerritoryId);
-      console.log("DEBUG BEFORE BULK - districtTerritoryId:", districtTerritoryId);
-      if (!cityTerritoryId || !districtTerritoryId) {
+      if (!t.cityTerritoryId || !t.districtTerritoryId) {
         throw new Error(
-          `Territory GUIDs missing - city: ${cityTerritoryId}, district: ${districtTerritoryId}`
+          `Territory GUIDs missing for order ${order.id} — city: ${t.cityTerritoryId}, district: ${t.districtTerritoryId}`
         );
       }
     }
@@ -798,7 +780,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     );
   }
   successWarnings.push(
-    `Territories resolved live via ZR POST /territories/search (wilaya + commune per order).`
+    "Territories: using saved wilaya_territory_id and commune_territory_id on each order."
   );
 
   res.status(200).json({

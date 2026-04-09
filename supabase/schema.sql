@@ -7,6 +7,8 @@ create table if not exists public.orders (
   phone text not null default '',
   wilaya text not null default '',
   commune text not null default '',
+  wilaya_territory_id text not null default '',
+  commune_territory_id text not null default '',
   address text not null default '',
   product text not null,
   sku text not null default '',

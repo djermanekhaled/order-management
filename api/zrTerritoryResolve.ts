@@ -8,7 +8,8 @@ const LOG_PREFIX = "[zr-territory-resolve]";
 export const cleanWilaya = (wilaya: string) =>
   wilaya.replace(/^\d+\s*[—-]\s*/, "").trim();
 
-function isGuid(v: string): boolean {
+export function isZrTerritoryGuid(v: unknown): boolean {
+  if (typeof v !== "string") return false;
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     v.trim()
   );
@@ -48,7 +49,7 @@ function firstResultId(items: Record<string, unknown>[]): string | null {
   const first = items[0];
   if (!first) return null;
   const id = asTerritoryId(first.id);
-  return id && isGuid(id) ? id : null;
+  return id && isZrTerritoryGuid(id) ? id : null;
 }
 
 async function postTerritoriesSearch(

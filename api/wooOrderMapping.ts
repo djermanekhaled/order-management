@@ -105,6 +105,8 @@ export function buildOrderRowFromWooCommerce(wc: WooOrderPayload, sourceName: st
     address: billingAddress(wc.billing),
     wilaya: (wc.billing?.state ?? "").trim(),
     commune: (wc.billing?.city ?? "").trim(),
+    wilaya_territory_id: "",
+    commune_territory_id: "",
     product,
     sku,
     quantity,

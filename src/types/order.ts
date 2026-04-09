@@ -34,6 +34,10 @@ export interface Order {
   phone: string;
   wilaya: string;
   commune: string;
+  /** ZR Express wilaya territory UUID from territories/search (level wilaya). */
+  wilaya_territory_id?: string;
+  /** ZR Express commune territory UUID (level commune, parent = wilaya). */
+  commune_territory_id?: string;
   address: string;
   product: string;
   /** Product / line SKU (optional). */
@@ -69,6 +73,8 @@ export interface OrderFormValues {
   phone: string;
   wilaya: string;
   commune: string;
+  wilaya_territory_id: string;
+  commune_territory_id: string;
   address: string;
   product: string;
   /** Product / line SKU (optional). */

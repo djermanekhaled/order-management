@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { WILAYAS } from "../constants/wilayas";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { supabase } from "../lib/supabase";
 import { isValidOrderState } from "../lib/orderWorkflow";
 import { generateInternalTrackingId } from "../lib/internalTracking";
@@ -10,11 +9,21 @@ import type {
   OrderSnapshot,
 } from "../types/order";
 
+function appApiUrl(path: string): string {
+  const o = import.meta.env.VITE_API_ORIGIN;
+  if (typeof o === "string" && o.trim()) {
+    return `${o.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+  }
+  return path.startsWith("/") ? path : `/${path}`;
+}
+
 const emptyForm: OrderFormValues = {
   customer_name: "",
   phone: "",
   wilaya: "",
   commune: "",
+  wilaya_territory_id: "",
+  commune_territory_id: "",
   address: "",
   product: "",
   sku: "",
@@ -66,6 +75,8 @@ interface OrderFormModalProps {
   onSubmit: (values: OrderFormValues, previous: OrderSnapshot | null) => Promise<void>;
 }
 
+type ZrDeliveryCompanyRow = { id: string; name: string; tenant_id: string };
+
 export function OrderFormModal({
   open,
   mode,
@@ -82,7 +93,39 @@ export function OrderFormModal({
   const [formDeliveryCompanies, setFormDeliveryCompanies] = useState<
     { id: string; name: string }[]
   >([]);
+  const [zrDeliveryCompanies, setZrDeliveryCompanies] = useState<ZrDeliveryCompanyRow[]>(
+    []
+  );
+  const [wilayaTerritoryOptions, setWilayaTerritoryOptions] = useState<
+    { id: string; name: string }[]
+  >([]);
+  const [communeTerritoryOptions, setCommuneTerritoryOptions] = useState<
+    { id: string; name: string }[]
+  >([]);
+  const [territoryListsLoading, setTerritoryListsLoading] = useState(false);
+  const [communesLoading, setCommunesLoading] = useState(false);
+  const [territoryListsError, setTerritoryListsError] = useState<string | null>(null);
   const [picklistsLoading, setPicklistsLoading] = useState(false);
+  const didMatchLegacyWilaya = useRef(false);
+  const didMatchLegacyCommune = useRef(false);
+  const prevZrCompanyIdForTerritories = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      didMatchLegacyWilaya.current = false;
+      didMatchLegacyCommune.current = false;
+      prevZrCompanyIdForTerritories.current = null;
+    }
+  }, [open]);
+
+  useEffect(() => {
+    didMatchLegacyWilaya.current = false;
+    didMatchLegacyCommune.current = false;
+  }, [initialOrder?.id]);
+
+  useEffect(() => {
+    didMatchLegacyCommune.current = false;
+  }, [values.wilaya_territory_id]);
 
   useEffect(() => {
     if (!open) return;
@@ -96,7 +139,7 @@ export function OrderFormModal({
         .order("name"),
       supabase
         .from("delivery_companies")
-        .select("id, name")
+        .select("id, name, type, tenant_id")
         .eq("active", true)
         .order("name"),
     ])
@@ -113,7 +156,18 @@ export function OrderFormModal({
           );
         }
         if (!dcRes.error && dcRes.data) {
-          setFormDeliveryCompanies(dcRes.data as { id: string; name: string }[]);
+          const rows = dcRes.data as {
+            id: string;
+            name: string;
+            type: string;
+            tenant_id: string;
+          }[];
+          setFormDeliveryCompanies(rows.map((r) => ({ id: r.id, name: r.name })));
+          setZrDeliveryCompanies(
+            rows
+              .filter((r) => r.type === "zr_express" && (r.tenant_id ?? "").trim())
+              .map((r) => ({ id: r.id, name: r.name, tenant_id: r.tenant_id }))
+          );
         }
       })
       .finally(() => {
@@ -123,6 +177,161 @@ export function OrderFormModal({
       cancelled = true;
     };
   }, [open]);
+
+  const zrCompanyIdForTerritories = useMemo(() => {
+    if (zrDeliveryCompanies.length === 0) return null;
+    const byName = zrDeliveryCompanies.find((c) => c.name === values.delivery_company);
+    return (byName ?? zrDeliveryCompanies[0]).id;
+  }, [zrDeliveryCompanies, values.delivery_company]);
+
+  useEffect(() => {
+    if (!open) return;
+    const z = zrCompanyIdForTerritories;
+    const prev = prevZrCompanyIdForTerritories.current;
+    if (prev && z && prev !== z) {
+      setValues((v) => ({
+        ...v,
+        wilaya: "",
+        wilaya_territory_id: "",
+        commune: "",
+        commune_territory_id: "",
+      }));
+      didMatchLegacyWilaya.current = false;
+      didMatchLegacyCommune.current = false;
+    }
+    prevZrCompanyIdForTerritories.current = z;
+  }, [open, zrCompanyIdForTerritories]);
+
+  useEffect(() => {
+    if (!open || !zrCompanyIdForTerritories) {
+      setWilayaTerritoryOptions([]);
+      setTerritoryListsError(null);
+      return;
+    }
+    let cancelled = false;
+    setTerritoryListsLoading(true);
+    setTerritoryListsError(null);
+    void fetch(appApiUrl("/api/zr-territories-search"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        deliveryCompanyId: zrCompanyIdForTerritories,
+        level: "wilaya",
+      }),
+    })
+      .then(async (res) => {
+        const data = (await res.json()) as {
+          error?: string;
+          territories?: { id: string; name: string }[];
+        };
+        if (cancelled) return;
+        if (!res.ok) {
+          throw new Error(
+            typeof data.error === "string" && data.error.trim()
+              ? data.error
+              : `Wilayas request failed (${res.status})`
+          );
+        }
+        setWilayaTerritoryOptions(Array.isArray(data.territories) ? data.territories : []);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setWilayaTerritoryOptions([]);
+          setTerritoryListsError(e instanceof Error ? e.message : "Could not load wilayas.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setTerritoryListsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, zrCompanyIdForTerritories]);
+
+  useEffect(() => {
+    if (!open || !zrCompanyIdForTerritories || !values.wilaya_territory_id.trim()) {
+      setCommuneTerritoryOptions([]);
+      return;
+    }
+    let cancelled = false;
+    setCommunesLoading(true);
+    void fetch(appApiUrl("/api/zr-territories-search"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        deliveryCompanyId: zrCompanyIdForTerritories,
+        level: "commune",
+        parentId: values.wilaya_territory_id.trim(),
+      }),
+    })
+      .then(async (res) => {
+        const data = (await res.json()) as {
+          error?: string;
+          territories?: { id: string; name: string }[];
+        };
+        if (cancelled) return;
+        if (!res.ok) {
+          throw new Error(
+            typeof data.error === "string" && data.error.trim()
+              ? data.error
+              : `Communes request failed (${res.status})`
+          );
+        }
+        setCommuneTerritoryOptions(Array.isArray(data.territories) ? data.territories : []);
+      })
+      .catch(() => {
+        if (!cancelled) setCommuneTerritoryOptions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setCommunesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, zrCompanyIdForTerritories, values.wilaya_territory_id]);
+
+  useEffect(() => {
+    if (!open || mode !== "edit" || !initialOrder) return;
+    if ((initialOrder.wilaya_territory_id ?? "").trim()) {
+      didMatchLegacyWilaya.current = true;
+      return;
+    }
+    if (didMatchLegacyWilaya.current || wilayaTerritoryOptions.length === 0) return;
+    const w = (initialOrder.wilaya ?? "").trim();
+    if (!w) return;
+    const m = wilayaTerritoryOptions.find(
+      (o) => o.name.trim().toLowerCase() === w.toLowerCase()
+    );
+    if (m) {
+      didMatchLegacyWilaya.current = true;
+      setValues((v) => ({
+        ...v,
+        wilaya: m.name,
+        wilaya_territory_id: m.id,
+        commune: "",
+        commune_territory_id: "",
+      }));
+    }
+  }, [open, mode, initialOrder, wilayaTerritoryOptions]);
+
+  useEffect(() => {
+    if (!open || mode !== "edit" || !initialOrder) return;
+    if ((initialOrder.commune_territory_id ?? "").trim()) {
+      didMatchLegacyCommune.current = true;
+      return;
+    }
+    if (didMatchLegacyCommune.current || communeTerritoryOptions.length === 0) return;
+    if (!(values.wilaya_territory_id ?? "").trim()) return;
+    const c = (initialOrder.commune ?? "").trim();
+    if (!c) return;
+    const m = communeTerritoryOptions.find(
+      (o) => o.name.trim().toLowerCase() === c.toLowerCase()
+    );
+    if (m) {
+      didMatchLegacyCommune.current = true;
+      setValues((v) => ({ ...v, commune: m.name, commune_territory_id: m.id }));
+    }
+  }, [open, mode, initialOrder, communeTerritoryOptions, values.wilaya_territory_id]);
 
   const productSelectOptions = useMemo(() => {
     const base = catalogProducts;
@@ -179,6 +388,8 @@ export function OrderFormModal({
         delivery_company: initialOrder.delivery_company ?? "",
         delivery_type: initialOrder.delivery_type ?? "home",
         internal_tracking_id: initialOrder.internal_tracking_id ?? "",
+        wilaya_territory_id: initialOrder.wilaya_territory_id ?? "",
+        commune_territory_id: initialOrder.commune_territory_id ?? "",
       });
     } else {
       setValues({
@@ -197,8 +408,12 @@ export function OrderFormModal({
       setLocalError("Customer name and product are required.");
       return;
     }
-    if (!values.wilaya) {
-      setLocalError("Please select a wilaya.");
+    if (!values.wilaya_territory_id.trim() || !values.wilaya.trim()) {
+      setLocalError("Please select a wilaya from the ZR Express list.");
+      return;
+    }
+    if (!values.commune_territory_id.trim() || !values.commune.trim()) {
+      setLocalError("Please select a commune from the ZR Express list.");
       return;
     }
     if (!isValidOrderState(values.status, values.sub_status)) {
@@ -294,36 +509,83 @@ export function OrderFormModal({
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300">
-                Wilaya
+                Wilaya (ZR Express)
               </label>
               <select
                 required
-                value={values.wilaya}
-                onChange={(e) =>
-                  setValues((v) => ({ ...v, wilaya: e.target.value }))
+                value={values.wilaya_territory_id}
+                disabled={
+                  picklistsLoading ||
+                  territoryListsLoading ||
+                  !zrCompanyIdForTerritories
                 }
-                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"
+                onChange={(e) => {
+                  const id = e.target.value;
+                  const opt = wilayaTerritoryOptions.find((o) => o.id === id);
+                  setValues((v) => ({
+                    ...v,
+                    wilaya: opt?.name ?? "",
+                    wilaya_territory_id: id,
+                    commune: "",
+                    commune_territory_id: "",
+                  }));
+                }}
+                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <option value="">Select wilaya</option>
-                {WILAYAS.map((w) => (
-                  <option key={w} value={w}>
-                    {w}
+                <option value="">
+                  {!zrCompanyIdForTerritories
+                    ? "Add an active ZR Express delivery company first"
+                    : territoryListsLoading
+                      ? "Loading wilayas…"
+                      : "Select wilaya"}
+                </option>
+                {wilayaTerritoryOptions.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
                   </option>
                 ))}
               </select>
+              {territoryListsError && (
+                <p className="mt-1 text-xs text-rose-300">{territoryListsError}</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300">
-                Commune
+                Commune (ZR Express)
               </label>
-              <input
-                value={values.commune}
-                onChange={(e) =>
-                  setValues((v) => ({ ...v, commune: e.target.value }))
+              <select
+                required
+                value={values.commune_territory_id}
+                disabled={
+                  picklistsLoading ||
+                  !values.wilaya_territory_id.trim() ||
+                  communesLoading ||
+                  !zrCompanyIdForTerritories
                 }
-                placeholder="District / commune"
-                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"
-              />
+                onChange={(e) => {
+                  const id = e.target.value;
+                  const opt = communeTerritoryOptions.find((o) => o.id === id);
+                  setValues((v) => ({
+                    ...v,
+                    commune: opt?.name ?? "",
+                    commune_territory_id: id,
+                  }));
+                }}
+                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <option value="">
+                  {!values.wilaya_territory_id.trim()
+                    ? "Select a wilaya first"
+                    : communesLoading
+                      ? "Loading communes…"
+                      : "Select commune"}
+                </option>
+                {communeTerritoryOptions.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300">

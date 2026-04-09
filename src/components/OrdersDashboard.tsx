@@ -480,6 +480,8 @@ export function OrdersDashboard() {
       phone: values.phone.trim(),
       wilaya: values.wilaya,
       commune: values.commune.trim(),
+      wilaya_territory_id: values.wilaya_territory_id.trim(),
+      commune_territory_id: values.commune_territory_id.trim(),
       address: values.address.trim(),
       product: values.product.trim(),
       sku: values.sku.trim(),
