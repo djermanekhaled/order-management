@@ -1,6 +1,10 @@
 import type { IncomingMessage } from "node:http";
 import { createClient } from "@supabase/supabase-js";
-import { buildOrderRowFromWooCommerce, wooOrderNote, type WooOrderPayload } from "./wooOrderMapping.js";
+import {
+  buildOrderRowFromWooCommerce,
+  wooOrderNote,
+  type WooOrderPayload,
+} from "./wooOrderMapping.js";
 
 type ApiRequest = IncomingMessage & {
   query?: Record<string, string | string[] | undefined>;
@@ -10,6 +14,8 @@ type ApiRequest = IncomingMessage & {
 type ApiResponse = {
   status: (code: number) => { json: (body: unknown) => void };
 };
+
+const PER_PAGE = 100;
 
 function parseJsonBody(req: ApiRequest): unknown | null {
   const b = req.body;
@@ -65,7 +71,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
   const { data: channel, error: chErr } = await supabaseAdmin
     .from("sales_channels")
-    .select("id, name, store_url, consumer_key, consumer_secret")
+    .select("id, name, store_url, consumer_key, consumer_secret, last_synced_at")
     .eq("id", channelId)
     .single();
 
@@ -77,76 +83,105 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   const base = channel.store_url.replace(/\/+$/, "");
   const wcUrl = new URL(`${base}/wp-json/wc/v3/orders`);
   wcUrl.searchParams.set("status", "pending");
-  wcUrl.searchParams.set("per_page", "50");
+  wcUrl.searchParams.set("per_page", String(PER_PAGE));
+  wcUrl.searchParams.set("orderby", "modified");
+  wcUrl.searchParams.set("order", "asc");
   wcUrl.searchParams.set("consumer_key", channel.consumer_key);
   wcUrl.searchParams.set("consumer_secret", channel.consumer_secret);
 
-  let wcRes: Response;
-  try {
-    wcRes = await fetch(wcUrl.toString(), { method: "GET", headers: { Accept: "application/json" } });
-  } catch (e) {
-    res.status(502).json({
-      error: "Failed to reach WooCommerce",
-      details: e instanceof Error ? e.message : String(e),
-    });
-    return;
-  }
-
-  if (!wcRes.ok) {
-    const snippet = (await wcRes.text()).slice(0, 800);
-    res.status(502).json({
-      error: "WooCommerce request failed",
-      status: wcRes.status,
-      details: snippet,
-    });
-    return;
-  }
-
-  let orders: WooOrderPayload[];
-  try {
-    const parsed: unknown = await wcRes.json();
-    if (!Array.isArray(parsed)) {
-      res.status(502).json({ error: "Unexpected WooCommerce response (not an array)" });
-      return;
-    }
-    orders = parsed as WooOrderPayload[];
-  } catch {
-    res.status(502).json({ error: "Invalid JSON from WooCommerce" });
-    return;
+  const last = channel.last_synced_at;
+  if (typeof last === "string" && last.trim()) {
+    wcUrl.searchParams.set("modified_after", last.trim());
   }
 
   let imported = 0;
   let skipped = 0;
   let failed = 0;
+  let fetched = 0;
+  let pages = 0;
   const insertErrors: string[] = [];
 
-  for (const wc of orders) {
-    const wcId = wc.id;
-    if (wcId == null) {
-      skipped += 1;
-      continue;
+  for (let page = 1; ; page += 1) {
+    wcUrl.searchParams.set("page", String(page));
+
+    let wcRes: Response;
+    try {
+      wcRes = await fetch(wcUrl.toString(), { method: "GET", headers: { Accept: "application/json" } });
+    } catch (e) {
+      res.status(502).json({
+        error: "Failed to reach WooCommerce",
+        details: e instanceof Error ? e.message : String(e),
+      });
+      return;
     }
 
-    const noteKey = wooOrderNote(wcId);
-    const { data: existing } = await supabaseAdmin
-      .from("orders")
-      .select("id")
-      .eq("notes", noteKey)
-      .maybeSingle();
-
-    if (existing) {
-      skipped += 1;
-      continue;
+    if (!wcRes.ok) {
+      const snippet = (await wcRes.text()).slice(0, 800);
+      res.status(502).json({
+        error: "WooCommerce request failed",
+        status: wcRes.status,
+        details: snippet,
+      });
+      return;
     }
 
-    const row = buildOrderRowFromWooCommerce(wc, channel.name);
-    const { error: insErr } = await supabaseAdmin.from("orders").insert(row);
-    if (insErr) {
-      failed += 1;
-      if (insertErrors.length < 5) insertErrors.push(insErr.message);
-      continue;
+    let orders: WooOrderPayload[];
+    try {
+      const parsed: unknown = await wcRes.json();
+      if (!Array.isArray(parsed)) {
+        res.status(502).json({ error: "Unexpected WooCommerce response (not an array)" });
+        return;
+      }
+      orders = parsed as WooOrderPayload[];
+    } catch {
+      res.status(502).json({ error: "Invalid JSON from WooCommerce" });
+      return;
     }
-    imported += 1;
+
+    pages += 1;
+    fetched += orders.length;
+
+    for (const wc of orders) {
+      const wcId = wc.id;
+      if (wcId == null) {
+        skipped += 1;
+        continue;
+      }
+
+      const noteKey = wooOrderNote(wcId);
+      const { data: existing } = await supabaseAdmin
+        .from("orders")
+        .select("id")
+        .eq("notes", noteKey)
+        .maybeSingle();
+
+      if (existing) {
+        skipped += 1;
+        continue;
+      }
+
+      const row = buildOrderRowFromWooCommerce(wc, channel.name);
+      const { error: insErr } = await supabaseAdmin.from("orders").insert(row);
+      if (insErr) {
+        failed += 1;
+        if (insertErrors.length < 5) insertErrors.push(insErr.message);
+        continue;
+      }
+      imported += 1;
+    }
+
+    if (orders.length < PER_PAGE) break;
+  }
+
+  const syncedAt = new Date().toISOString();
+  const { error: syncErr } = await supabaseAdmin
+    .from("sales_channels")
+    .update({ last_synced_at: syncedAt })
+    .eq("id", channelId);
+
+  if (syncErr) {
+    res.status(500).json({ error: syncErr.message });
+    return;
   }
 
   res.status(200).json({
@@ -154,7 +189,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     imported,
     skipped,
     failed,
-    fetched: orders.length,
+    fetched,
+    pages,
+    last_synced_at: syncedAt,
     errors: insertErrors.length ? insertErrors : undefined,
   });
 }

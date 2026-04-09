@@ -3,6 +3,32 @@ import { supabase } from "../lib/supabase";
 import type { SalesChannel, SalesChannelStatus } from "../types/salesChannel";
 import { SalesChannelModal } from "./SalesChannelModal";
 
+function appApiUrl(path: string): string {
+  const o = import.meta.env.VITE_API_ORIGIN;
+  if (typeof o === "string" && o.trim()) {
+    return `${o.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+  }
+  return path.startsWith("/") ? path : `/${path}`;
+}
+
+async function registerWooWebhookForChannel(channelId: string): Promise<void> {
+  const res = await fetch(appApiUrl("/api/register-woo-webhook"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ channel_id: channelId }),
+  });
+  const raw = await res.text();
+  let body: { error?: string } = {};
+  try {
+    body = raw ? (JSON.parse(raw) as { error?: string }) : {};
+  } catch {
+    /* ignore */
+  }
+  if (!res.ok) {
+    throw new Error(body.error ?? `Webhook registration failed (${res.status})`);
+  }
+}
+
 interface SalesChannelsPageProps {
   channelModalOpen: boolean;
   onChannelModalOpen: () => void;
@@ -26,7 +52,9 @@ export function SalesChannelsPage({
     setLoading(true);
     const { data, error: qErr } = await supabase
       .from("sales_channels")
-      .select("*")
+      .select(
+        "id, name, store_url, consumer_key, consumer_secret, status, last_synced_at, woo_webhook_id, created_at, updated_at"
+      )
       .order("created_at", { ascending: false });
     setLoading(false);
     if (qErr) {
@@ -46,14 +74,28 @@ export function SalesChannelsPage({
     consumer_key: string;
     consumer_secret: string;
   }) {
-    const { error: insErr } = await supabase.from("sales_channels").insert({
-      name: row.name,
-      store_url: row.store_url,
-      consumer_key: row.consumer_key,
-      consumer_secret: row.consumer_secret,
-      status: "active",
-    });
+    const { data: inserted, error: insErr } = await supabase
+      .from("sales_channels")
+      .insert({
+        name: row.name,
+        store_url: row.store_url,
+        consumer_key: row.consumer_key,
+        consumer_secret: row.consumer_secret,
+        status: "active",
+      })
+      .select("id")
+      .single();
     if (insErr) throw new Error(insErr.message);
+    if (inserted?.id) {
+      try {
+        await registerWooWebhookForChannel(inserted.id);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setError(
+          `Channel saved, but WooCommerce webhook registration failed: ${msg}. Activate the channel again to retry.`
+        );
+      }
+    }
     await loadChannels();
     onChannelsChanged?.();
   }
@@ -67,6 +109,14 @@ export function SalesChannelsPage({
     if (upErr) {
       setError(upErr.message);
       return;
+    }
+    if (next === "active") {
+      try {
+        await registerWooWebhookForChannel(id);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setError(`Channel activated, but webhook registration failed: ${msg}. Try Activate again.`);
+      }
     }
     await loadChannels();
     onChannelsChanged?.();
@@ -104,11 +154,9 @@ export function SalesChannelsPage({
           </p>
           <h2 className="mt-1 text-2xl font-semibold text-white">Sales channels</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Connect WooCommerce stores with REST API keys.{" "}
-            <span className="text-slate-400">
-              Pending orders import automatically every minute
-            </span>{" "}
-            while the app is open; imported orders use the channel name as{" "}
+            Connect WooCommerce stores with REST API keys. New orders are pushed via a
+            registered webhook; pending orders also sync periodically while the app is open.
+            Imported orders use the channel name as{" "}
             <span className="text-slate-400">source</span>.
           </p>
         </div>

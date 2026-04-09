@@ -73,6 +73,9 @@ create table if not exists public.sales_channels (
   consumer_secret text not null,
   status text not null default 'active'
     check (status in ('active', 'inactive')),
+  last_synced_at timestamptz null,
+  webhook_secret text not null default '',
+  woo_webhook_id text not null default '',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
