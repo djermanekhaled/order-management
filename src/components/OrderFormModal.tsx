@@ -178,11 +178,23 @@ export function OrderFormModal({
     };
   }, [open]);
 
+  /** Only when the selected delivery company row is ZR Express (name match). */
   const zrCompanyIdForTerritories = useMemo(() => {
-    if (zrDeliveryCompanies.length === 0) return null;
-    const byName = zrDeliveryCompanies.find((c) => c.name === values.delivery_company);
-    return (byName ?? zrDeliveryCompanies[0]).id;
+    const dc = (values.delivery_company ?? "").trim();
+    if (!dc) return null;
+    const match = zrDeliveryCompanies.find((c) => c.name === dc);
+    return match?.id ?? null;
   }, [zrDeliveryCompanies, values.delivery_company]);
+
+  useEffect(() => {
+    if (!open || zrCompanyIdForTerritories) return;
+    setValues((v) => {
+      if (!(v.wilaya_territory_id ?? "").trim() && !(v.commune_territory_id ?? "").trim()) {
+        return v;
+      }
+      return { ...v, wilaya_territory_id: "", commune_territory_id: "" };
+    });
+  }, [open, zrCompanyIdForTerritories]);
 
   useEffect(() => {
     if (!open) return;
@@ -291,7 +303,7 @@ export function OrderFormModal({
   }, [open, zrCompanyIdForTerritories, values.wilaya_territory_id]);
 
   useEffect(() => {
-    if (!open || mode !== "edit" || !initialOrder) return;
+    if (!open || mode !== "edit" || !initialOrder || !zrCompanyIdForTerritories) return;
     if ((initialOrder.wilaya_territory_id ?? "").trim()) {
       didMatchLegacyWilaya.current = true;
       return;
@@ -312,10 +324,10 @@ export function OrderFormModal({
         commune_territory_id: "",
       }));
     }
-  }, [open, mode, initialOrder, wilayaTerritoryOptions]);
+  }, [open, mode, initialOrder, wilayaTerritoryOptions, zrCompanyIdForTerritories]);
 
   useEffect(() => {
-    if (!open || mode !== "edit" || !initialOrder) return;
+    if (!open || mode !== "edit" || !initialOrder || !zrCompanyIdForTerritories) return;
     if ((initialOrder.commune_territory_id ?? "").trim()) {
       didMatchLegacyCommune.current = true;
       return;
@@ -331,7 +343,14 @@ export function OrderFormModal({
       didMatchLegacyCommune.current = true;
       setValues((v) => ({ ...v, commune: m.name, commune_territory_id: m.id }));
     }
-  }, [open, mode, initialOrder, communeTerritoryOptions, values.wilaya_territory_id]);
+  }, [
+    open,
+    mode,
+    initialOrder,
+    communeTerritoryOptions,
+    values.wilaya_territory_id,
+    zrCompanyIdForTerritories,
+  ]);
 
   const productSelectOptions = useMemo(() => {
     const base = catalogProducts;
@@ -408,13 +427,24 @@ export function OrderFormModal({
       setLocalError("Customer name and product are required.");
       return;
     }
-    if (!values.wilaya_territory_id.trim() || !values.wilaya.trim()) {
-      setLocalError("Please select a wilaya from the ZR Express list.");
-      return;
-    }
-    if (!values.commune_territory_id.trim() || !values.commune.trim()) {
-      setLocalError("Please select a commune from the ZR Express list.");
-      return;
+    if (zrCompanyIdForTerritories) {
+      if (!values.wilaya_territory_id.trim() || !values.wilaya.trim()) {
+        setLocalError("Please select a wilaya from the ZR Express list.");
+        return;
+      }
+      if (!values.commune_territory_id.trim() || !values.commune.trim()) {
+        setLocalError("Please select a commune from the ZR Express list.");
+        return;
+      }
+    } else {
+      if (!values.wilaya.trim()) {
+        setLocalError("Please enter a wilaya.");
+        return;
+      }
+      if (!values.commune.trim()) {
+        setLocalError("Please enter a commune.");
+        return;
+      }
     }
     if (!isValidOrderState(values.status, values.sub_status)) {
       setLocalError("Pick a valid sub-status for the selected main status.");
@@ -507,86 +537,140 @@ export function OrderFormModal({
                 className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"
               />
             </div>
-            <div>
+            <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-slate-300">
-                Wilaya (ZR Express)
+                Delivery company
               </label>
               <select
-                required
-                value={values.wilaya_territory_id}
-                disabled={
-                  picklistsLoading ||
-                  territoryListsLoading ||
-                  !zrCompanyIdForTerritories
-                }
-                onChange={(e) => {
-                  const id = e.target.value;
-                  const opt = wilayaTerritoryOptions.find((o) => o.id === id);
+                value={values.delivery_company}
+                disabled={picklistsLoading}
+                onChange={(e) =>
                   setValues((v) => ({
                     ...v,
-                    wilaya: opt?.name ?? "",
-                    wilaya_territory_id: id,
-                    commune: "",
-                    commune_territory_id: "",
-                  }));
-                }}
+                    delivery_company: e.target.value,
+                  }))
+                }
                 className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <option value="">
-                  {!zrCompanyIdForTerritories
-                    ? "Add an active ZR Express delivery company first"
-                    : territoryListsLoading
-                      ? "Loading wilayas…"
-                      : "Select wilaya"}
+                  {picklistsLoading ? "Loading…" : "— None —"}
                 </option>
-                {wilayaTerritoryOptions.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name}
-                  </option>
-                ))}
-              </select>
-              {territoryListsError && (
-                <p className="mt-1 text-xs text-rose-300">{territoryListsError}</p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300">
-                Commune (ZR Express)
-              </label>
-              <select
-                required
-                value={values.commune_territory_id}
-                disabled={
-                  picklistsLoading ||
-                  !values.wilaya_territory_id.trim() ||
-                  communesLoading ||
-                  !zrCompanyIdForTerritories
-                }
-                onChange={(e) => {
-                  const id = e.target.value;
-                  const opt = communeTerritoryOptions.find((o) => o.id === id);
-                  setValues((v) => ({
-                    ...v,
-                    commune: opt?.name ?? "",
-                    commune_territory_id: id,
-                  }));
-                }}
-                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <option value="">
-                  {!values.wilaya_territory_id.trim()
-                    ? "Select a wilaya first"
-                    : communesLoading
-                      ? "Loading communes…"
-                      : "Select commune"}
-                </option>
-                {communeTerritoryOptions.map((c) => (
-                  <option key={c.id} value={c.id}>
+                {deliveryCompanySelectOptions.map((c) => (
+                  <option key={c.id} value={c.name}>
                     {c.name}
                   </option>
                 ))}
               </select>
+              <p className="mt-1 text-xs text-slate-500">
+                Choose ZR Express here to load wilaya and commune from the ZR API.
+              </p>
             </div>
+            {zrCompanyIdForTerritories ? (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300">
+                    Wilaya (ZR Express)
+                  </label>
+                  <select
+                    required
+                    value={values.wilaya_territory_id}
+                    disabled={picklistsLoading || territoryListsLoading}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      const opt = wilayaTerritoryOptions.find((o) => o.id === id);
+                      setValues((v) => ({
+                        ...v,
+                        wilaya: opt?.name ?? "",
+                        wilaya_territory_id: id,
+                        commune: "",
+                        commune_territory_id: "",
+                      }));
+                    }}
+                    className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <option value="">
+                      {territoryListsLoading ? "Loading wilayas…" : "Select wilaya"}
+                    </option>
+                    {wilayaTerritoryOptions.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.name}
+                      </option>
+                    ))}
+                  </select>
+                  {territoryListsError && (
+                    <p className="mt-1 text-xs text-rose-300">{territoryListsError}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300">
+                    Commune (ZR Express)
+                  </label>
+                  <select
+                    required
+                    value={values.commune_territory_id}
+                    disabled={
+                      picklistsLoading ||
+                      !values.wilaya_territory_id.trim() ||
+                      communesLoading
+                    }
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      const opt = communeTerritoryOptions.find((o) => o.id === id);
+                      setValues((v) => ({
+                        ...v,
+                        commune: opt?.name ?? "",
+                        commune_territory_id: id,
+                      }));
+                    }}
+                    className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <option value="">
+                      {!values.wilaya_territory_id.trim()
+                        ? "Select a wilaya first"
+                        : communesLoading
+                          ? "Loading communes…"
+                          : "Select commune"}
+                    </option>
+                    {communeTerritoryOptions.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300">
+                    Wilaya
+                  </label>
+                  <input
+                    required
+                    value={values.wilaya}
+                    onChange={(e) =>
+                      setValues((v) => ({ ...v, wilaya: e.target.value }))
+                    }
+                    placeholder="Wilaya"
+                    className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-300">
+                    Commune
+                  </label>
+                  <input
+                    required
+                    value={values.commune}
+                    onChange={(e) =>
+                      setValues((v) => ({ ...v, commune: e.target.value }))
+                    }
+                    placeholder="District / commune"
+                    className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"
+                  />
+                </div>
+              </>
+            )}
             <div>
               <label className="block text-sm font-medium text-slate-300">
                 Delivery Type
@@ -748,31 +832,6 @@ export function OrderFormModal({
                 }
                 className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"
               />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-sm font-medium text-slate-300">
-                Delivery company
-              </label>
-              <select
-                value={values.delivery_company}
-                disabled={picklistsLoading}
-                onChange={(e) =>
-                  setValues((v) => ({
-                    ...v,
-                    delivery_company: e.target.value,
-                  }))
-                }
-                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <option value="">
-                  {picklistsLoading ? "Loading…" : "— None —"}
-                </option>
-                {deliveryCompanySelectOptions.map((c) => (
-                  <option key={c.id} value={c.name}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
             </div>
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-slate-300">
