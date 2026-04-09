@@ -168,7 +168,7 @@ export async function resolveCityDistrictGuidsForOrder(
     tenantId,
     bodyWilayaSearch(wilayaName)
   );
-  if (!wilayaRes.ok) {
+  if (wilayaRes.ok === false) {
     const result = {
       ok: false as const,
       error: `ZR territories/search (wilaya): ${wilayaRes.error}`,
@@ -192,7 +192,7 @@ export async function resolveCityDistrictGuidsForOrder(
     tenantId,
     bodyCommuneSearch(communeT, cityTerritoryId)
   );
-  if (!communeRes.ok) {
+  if (communeRes.ok === false) {
     const result = {
       ok: false as const,
       error: `ZR territories/search (commune): ${communeRes.error}`,

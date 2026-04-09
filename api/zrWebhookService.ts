@@ -33,7 +33,7 @@ export async function registerZrParcelStateWebhook(tenantId: string): Promise<
         "Set ZR_WEBHOOK_PUBLIC_URL (e.g. https://your-app.vercel.app) or rely on VERCEL_URL so the webhook URL can be built.",
     };
   }
-  const callbackUrl = `${base}/api/zr-webhook`;
+  const callbackUrl = `${base}/api/handler?action=zr-webhook`;
   const body = JSON.stringify({
     url: callbackUrl,
     eventTypes: ["parcel.state.updated"],

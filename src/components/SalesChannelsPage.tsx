@@ -12,7 +12,7 @@ function appApiUrl(path: string): string {
 }
 
 async function registerWooWebhookForChannel(channelId: string): Promise<void> {
-  const res = await fetch(appApiUrl("/api/register-woo-webhook"), {
+  const res = await fetch(appApiUrl("/api/handler?action=register-woo-webhook"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ channel_id: channelId }),

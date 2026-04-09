@@ -1,16 +1,16 @@
 import type { IncomingMessage } from "node:http";
 
-export type ApiRequest = IncomingMessage & {
+export type TerritoryApiRequest = IncomingMessage & {
   query?: Record<string, string | string[] | undefined>;
   body?: unknown;
 };
 
-export type ApiResponse = {
+export type TerritoryApiResponse = {
   status: (code: number) => { json: (body: unknown) => void };
 };
 
 /** Parse query string from `req.url` (Vercel / Node). */
-export function parseRequestQuery(req: ApiRequest): Record<string, string> {
+export function parseRequestQuery(req: TerritoryApiRequest): Record<string, string> {
   const q = req.query;
   if (q && typeof q === "object") {
     const out: Record<string, string> = {};

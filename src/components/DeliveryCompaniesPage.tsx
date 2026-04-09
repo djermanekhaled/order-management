@@ -19,7 +19,7 @@ function appApiUrl(path: string): string {
 }
 
 async function registerZrWebhookForCompany(deliveryCompanyId: string): Promise<void> {
-  const url = appApiUrl("/api/register-zr-webhook");
+  const url = appApiUrl("/api/handler?action=register-zr-webhook");
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

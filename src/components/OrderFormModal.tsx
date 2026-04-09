@@ -303,7 +303,7 @@ export function OrderFormModal({
     let cancelled = false;
     setTerritoryListsLoading(true);
     setTerritoryListsError(null);
-    void fetch(appApiUrl("/api/zr-territories-search"), {
+    void fetch(appApiUrl("/api/handler?action=zr-territories-search"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -347,7 +347,7 @@ export function OrderFormModal({
     }
     let cancelled = false;
     setCommunesLoading(true);
-    void fetch(appApiUrl("/api/zr-territories-search"), {
+    void fetch(appApiUrl("/api/handler?action=zr-territories-search"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
