@@ -16,11 +16,11 @@ const PROVIDERS: Array<{
   name: string;
   logoUrl: string;
 }> = [
-  { id: "zr_express", name: "ZR Express", logoUrl: "https://zrexpress.app/favicon.ico" },
-  { id: "yalidine", name: "Yalidine", logoUrl: "https://yalidine.app/favicon.ico" },
-  { id: "noest", name: "Noest", logoUrl: "https://noest.dz/favicon.ico" },
-  { id: "dhd", name: "DHD", logoUrl: "https://dhd.dz/favicon.ico" },
-  { id: "maystro", name: "Maystro", logoUrl: "https://maystrodelivery.com/favicon.ico" },
+  { id: "zr_express", name: "ZR Express", logoUrl: "/logos/zr.png" },
+  { id: "yalidine", name: "Yalidine", logoUrl: "/logos/yalidine.png" },
+  { id: "noest", name: "Noest", logoUrl: "/logos/noest.png" },
+  { id: "dhd", name: "DHD", logoUrl: "/logos/dhd.png" },
+  { id: "maystro", name: "Maystro", logoUrl: "/logos/maystro.png" },
 ];
 
 interface DeliveryCompanyModalProps {

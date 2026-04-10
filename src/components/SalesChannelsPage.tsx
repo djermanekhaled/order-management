@@ -52,7 +52,7 @@ function platformMeta(platform: SalesChannelPlatform): {
   }
   return {
     label: "WooCommerce",
-    logoUrl: "/woo-logo.png",
+    logoUrl: "/logos/woo.png",
   };
 }
 

@@ -17,7 +17,7 @@ const PLATFORM_OPTIONS: Array<{
   {
     id: "woocommerce",
     name: "WooCommerce",
-    logoUrl: "/woo-logo.png",
+    logoUrl: "/logos/woo.png",
   },
   {
     id: "shopify",
