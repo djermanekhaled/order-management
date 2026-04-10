@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { countByNavKey } from "../lib/sidebarNav";
 import { statusLabel } from "../lib/orderWorkflow";
 import type { Order, SidebarNavKey } from "../types/order";
@@ -42,7 +42,6 @@ interface AppSidebarProps {
   navKey: SidebarNavKey;
   onNavKey: (key: SidebarNavKey) => void;
   collapsed: boolean;
-  onToggleCollapsed: () => void;
   activeView: AppView;
   onViewChange: (view: AppView) => void;
   salesChannelCount: number;
@@ -81,12 +80,45 @@ function NavRow({
   );
 }
 
+function CollapsedSectionIcon({
+  title,
+  active,
+  onClick,
+  tintClass,
+  children,
+}: {
+  title: string;
+  active: boolean;
+  onClick: () => void;
+  tintClass: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition ${
+        active
+          ? "bg-indigo-600/25 text-white ring-1 ring-indigo-500/40"
+          : "text-slate-300 hover:bg-slate-800/90"
+      }`}
+    >
+      <span
+        className={`flex h-8 w-8 items-center justify-center rounded-md ${tintClass}`}
+      >
+        {children}
+      </span>
+    </button>
+  );
+}
+
 export function AppSidebar({
   orders,
   navKey,
   onNavKey,
   collapsed,
-  onToggleCollapsed,
   activeView,
   onViewChange,
   salesChannelCount,
@@ -116,112 +148,180 @@ export function AppSidebar({
 
   return (
     <aside
+      id="app-sidebar"
       className={`fixed left-0 top-0 z-30 flex h-screen flex-col border-r border-slate-800/80 bg-slate-950/90 backdrop-blur-sm transition-[width] duration-200 ease-out ${
-        collapsed ? "w-[72px]" : "w-[272px]"
+        collapsed ? "w-[60px]" : "w-[272px]"
       }`}
     >
       <div
-        className={`flex flex-col gap-2 border-b border-slate-800/80 p-3 ${
-          collapsed ? "items-center" : ""
+        className={`flex shrink-0 border-b border-slate-800/80 p-2 ${
+          collapsed ? "justify-center" : "px-3 py-2"
         }`}
       >
-        <div
-          className={`flex min-h-[48px] w-full items-center ${
-            collapsed ? "min-h-0 justify-center" : "justify-start"
-          }`}
+        {!collapsed ? (
+          <img
+            src="/logo.png"
+            alt="COD Manager"
+            className="block max-h-[40px] w-auto max-w-full"
+          />
+        ) : (
+          <img
+            src="/logo-icon.png"
+            alt="COD Manager"
+            className="block max-h-[40px] w-auto"
+          />
+        )}
+      </div>
+
+      {collapsed ? (
+        <nav
+          className="flex flex-1 flex-col items-center gap-1.5 overflow-y-auto py-2"
+          aria-label="Main"
         >
-          {!collapsed ? (
-            <img
-              src="/logo.png"
-              alt="COD Manager"
-              className="block h-12 w-auto max-w-full"
-            />
-          ) : (
-            <img
-              src="/logo-icon.png"
-              alt="COD Manager"
-              className="block h-9 w-auto"
-            />
-          )}
-        </div>
-        <div className={`flex w-full ${collapsed ? "justify-center" : "justify-end"}`}>
-          <button
-            type="button"
-            onClick={onToggleCollapsed}
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          <CollapsedSectionIcon
+            title="Dashboard"
+            active={activeView === "dashboard"}
+            onClick={() => onViewChange("dashboard")}
+            tintClass="bg-cyan-600/30 text-cyan-200"
           >
             <svg
-              className="h-5 w-5"
+              className="h-4 w-4"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
             >
-              {collapsed ? (
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 5l7 7-7 7M5 5l7 7-7 7"
-                />
-              ) : (
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
-                />
-              )}
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M3 13h7V3H3v10zm0 8h7v-6H3v6zm11 0h7V11h-7v10zm0-18v6h7V3h-7z"
+              />
             </svg>
-          </button>
-        </div>
-      </div>
-
-      {collapsed ? (
-        <div className="flex flex-1 flex-col items-center gap-3 p-3">
-          <button
-            type="button"
-            onClick={() => onViewChange("dashboard")}
-            className={`flex flex-col items-center gap-1 rounded-xl border p-3 ${
-              activeView === "dashboard"
-                ? "border-indigo-500/40 bg-indigo-600/20 text-white"
-                : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-indigo-500/40 hover:text-white"
-            }`}
-            title="Dashboard"
+          </CollapsedSectionIcon>
+          <CollapsedSectionIcon
+            title="Orders"
+            active={activeView === "orders"}
+            onClick={() => onViewChange("orders")}
+            tintClass="bg-indigo-600/30 text-indigo-200"
           >
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-600/30 text-cyan-200">
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 13h7V3H3v10zm0 8h7v-6H3v6zm11 0h7V11h-7v10zm0-18v6h7V3h-7z" />
-              </svg>
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={onToggleCollapsed}
-            className="flex flex-col items-center gap-1 rounded-xl border border-slate-800 bg-slate-900/60 p-3 text-slate-300 hover:border-indigo-500/40 hover:text-white"
-            title="Expand to browse orders"
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
+              />
+            </svg>
+          </CollapsedSectionIcon>
+          <CollapsedSectionIcon
+            title="Tracking Orders"
+            active={activeView === "tracking_orders"}
+            onClick={() => {
+              onViewChange("tracking_orders");
+              onNavKey("follow");
+            }}
+            tintClass="bg-emerald-600/30 text-emerald-200"
           >
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-600/30 text-indigo-200">
-              <svg
-                className="h-5 w-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
-                />
-              </svg>
-            </span>
-            <Badge n={orders.length} />
-            <span className="max-w-[4rem] text-center text-[10px] font-medium leading-tight">
-              Orders
-            </span>
-          </button>
-        </div>
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M3 7h11v8H3V7zm11 2h3l4 4v2h-7V9zM7 19a2 2 0 100-4 2 2 0 000 4zm10 0a2 2 0 100-4 2 2 0 000 4z"
+              />
+            </svg>
+          </CollapsedSectionIcon>
+          <CollapsedSectionIcon
+            title="Sales Channels"
+            active={activeView === "sales_channels"}
+            onClick={() => onViewChange("sales_channels")}
+            tintClass="bg-violet-600/30 text-violet-200"
+          >
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M13 10V3L4 14h7v7l9-11h-7z"
+              />
+            </svg>
+          </CollapsedSectionIcon>
+          <CollapsedSectionIcon
+            title="Products"
+            active={activeView === "products"}
+            onClick={() => onViewChange("products")}
+            tintClass="bg-amber-600/30 text-amber-200"
+          >
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
+              />
+            </svg>
+          </CollapsedSectionIcon>
+          <CollapsedSectionIcon
+            title="Delivery Companies"
+            active={activeView === "delivery_companies"}
+            onClick={() => onViewChange("delivery_companies")}
+            tintClass="bg-sky-600/30 text-sky-200"
+          >
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"
+              />
+            </svg>
+          </CollapsedSectionIcon>
+          <CollapsedSectionIcon
+            title="Inventory"
+            active={activeView === "inventory"}
+            onClick={() => onViewChange("inventory")}
+            tintClass="bg-teal-600/30 text-teal-200"
+          >
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
+              />
+            </svg>
+          </CollapsedSectionIcon>
+        </nav>
       ) : (
         <nav className="flex-1 overflow-y-auto p-2" aria-label="Main">
           <div className="mb-2 rounded-xl border border-slate-800/60 bg-slate-900/40 p-1">

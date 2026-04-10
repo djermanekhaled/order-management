@@ -802,7 +802,6 @@ export function OrdersDashboard() {
           setNavKey(k);
         }}
         collapsed={sidebarCollapsed}
-        onToggleCollapsed={() => setSidebarCollapsed((c) => !c)}
         activeView={
           sidebarView === "dashboard"
             ? "dashboard"
@@ -852,13 +851,45 @@ export function OrdersDashboard() {
 
       <div
         className={`flex min-h-screen min-w-0 flex-col transition-[margin-left] duration-200 ease-out ${
-          sidebarCollapsed ? "ml-[72px]" : "ml-[272px]"
+          sidebarCollapsed ? "ml-[60px]" : "ml-[272px]"
         }`}
       >
         <header
-          className="sticky top-0 z-20 flex h-10 max-h-[40px] shrink-0 items-center border-b border-slate-800/80 bg-slate-950/40 px-4 sm:px-6"
+          className="sticky top-0 z-20 flex h-10 max-h-[40px] shrink-0 items-center gap-2 border-b border-slate-800/80 bg-slate-950/40 pl-2 pr-4 sm:pr-6"
           aria-label="Toolbar"
-        />
+        >
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed((c) => !c)}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white"
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!sidebarCollapsed}
+            aria-controls="app-sidebar"
+          >
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              {sidebarCollapsed ? (
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M13 5l7 7-7 7M5 5l7 7-7 7"
+                />
+              ) : (
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
+                />
+              )}
+            </svg>
+          </button>
+        </header>
         <div className="min-w-0 flex-1 px-4 py-8 sm:px-6 lg:px-10">
         {sidebarView === "dashboard" ? (
           <DashboardPage />
