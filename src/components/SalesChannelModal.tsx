@@ -23,7 +23,7 @@ const PLATFORM_OPTIONS: Array<{
   {
     id: "shopify",
     name: "Shopify",
-    logoUrl: "https://upload.wikimedia.org/wikipedia/commons/0/0e/Shopify_logo_2018.svg",
+    logoUrl: "https://cdn.simpleicons.org/shopify/95BF47",
   },
   {
     id: "google_sheet",
@@ -122,7 +122,7 @@ export function SalesChannelModal({
         {!selectedPlatform ? (
           <div className="space-y-4 px-5 py-5">
             <p className="text-sm text-slate-400">Step 1: Choose a platform</p>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
               {PLATFORM_OPTIONS.map((platform) => (
                 <button
                   key={platform.id}
@@ -136,9 +136,9 @@ export function SalesChannelModal({
                         type="image/svg+xml"
                         data={platform.logoUrl}
                         aria-label="WooCommerce logo"
-                        className="block h-10 w-full max-w-[140px]"
+                        className="block h-8 w-full max-w-[170px]"
                       >
-                        <div className="text-2xl font-extrabold tracking-tight text-[#7f54b3]">
+                        <div className="text-base font-extrabold tracking-tight text-[#7f54b3]">
                           WooCommerce
                         </div>
                       </object>
