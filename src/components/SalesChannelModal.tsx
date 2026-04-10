@@ -13,11 +13,14 @@ const PLATFORM_OPTIONS: Array<{
   id: Platform;
   name: string;
   logoUrl: string;
+  fallbackLogoUrl?: string;
 }> = [
   {
     id: "woocommerce",
     name: "WooCommerce",
     logoUrl: "https://upload.wikimedia.org/wikipedia/commons/2/2a/WooCommerce_logo.svg",
+    fallbackLogoUrl:
+      "https://woocommerce.com/wp-content/themes/woo/images/logo-woocommerce.svg",
   },
   {
     id: "shopify",
@@ -49,11 +52,21 @@ export function SalesChannelModal({
   const [saving, setSaving] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [selectedPlatform, setSelectedPlatform] = useState<Platform | null>(null);
+  const [platformLogoSrc, setPlatformLogoSrc] = useState<Record<Platform, string>>({
+    woocommerce: PLATFORM_OPTIONS[0].logoUrl,
+    shopify: PLATFORM_OPTIONS[1].logoUrl,
+    google_sheet: PLATFORM_OPTIONS[2].logoUrl,
+  });
 
   function resetModalState() {
     setValues(empty);
     setLocalError(null);
     setSelectedPlatform(null);
+    setPlatformLogoSrc({
+      woocommerce: PLATFORM_OPTIONS[0].logoUrl,
+      shopify: PLATFORM_OPTIONS[1].logoUrl,
+      google_sheet: PLATFORM_OPTIONS[2].logoUrl,
+    });
   }
 
   function handleClose() {
@@ -131,13 +144,22 @@ export function SalesChannelModal({
                 >
                   <div className="flex min-h-16 items-center justify-center">
                     <img
-                      src={platform.logoUrl}
+                      src={platformLogoSrc[platform.id]}
                       alt={`${platform.name} logo`}
-                      className="max-h-10 w-auto object-contain"
+                      className="block h-10 w-auto max-w-full object-contain"
                       loading="lazy"
+                      onError={() => {
+                        if (platform.id === "woocommerce" && platform.fallbackLogoUrl) {
+                          setPlatformLogoSrc((prev) =>
+                            prev.woocommerce === platform.fallbackLogoUrl
+                              ? prev
+                              : { ...prev, woocommerce: platform.fallbackLogoUrl }
+                          );
+                        }
+                      }}
                     />
                   </div>
-                  <p className="mt-3 text-sm font-semibold text-slate-200 group-hover:text-white">
+                  <p className="mt-3 block text-sm font-semibold leading-5 text-slate-200 group-hover:text-white">
                     {platform.name}
                   </p>
                 </button>
