@@ -357,6 +357,13 @@ function buildZrUiErrorPayload(
   };
 }
 
+function isDuplicateExternalIdError(zrJson: unknown, zrText: string): boolean {
+  const needle = "ParcelErrors.DuplicateExternalId";
+  if (typeof zrText === "string" && zrText.includes(needle)) return true;
+  const nested = collectZrErrorStrings(zrJson, 0);
+  return nested.some((s) => s.includes(needle));
+}
+
 async function resolveZrProductIdSku(
   productName: string,
   unitPrice: number,
@@ -698,6 +705,37 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   const zrAuthVariantUsed = bulkOutcome.variant;
 
   if (!zrRes.ok) {
+    if (isDuplicateExternalIdError(zrJson, zrText)) {
+      let updatedOnDuplicate = 0;
+      const duplicateUpdateErrors: string[] = [];
+      for (const order of list) {
+        const { error: uErr } = await db
+          .from("orders")
+          .update({
+            status: "follow",
+            sub_status: "confirmed",
+            delivery_company: company.name,
+            shipping_status: "zr_duplicate_external_id",
+          })
+          .eq("id", order.id);
+        if (uErr) {
+          duplicateUpdateErrors.push(`${order.id}: ${uErr.message}`);
+          continue;
+        }
+        updatedOnDuplicate += 1;
+      }
+
+      res.status(200).json({
+        ok: true,
+        updated: updatedOnDuplicate,
+        zrStep: "parcels_bulk_duplicate_external_id",
+        warning:
+          "ZR returned ParcelErrors.DuplicateExternalId; treated as success and orders were moved to follow/confirmed.",
+        errors: duplicateUpdateErrors.length ? duplicateUpdateErrors : undefined,
+      });
+      return;
+    }
+
     console.error(`${LOG_PREFIX} ZR parcels bulk error`, {
       authMethodLastUsed: zrAuthVariantDescription(zrAuthVariantUsed),
       status: zrRes.status,
