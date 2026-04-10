@@ -58,6 +58,7 @@ export interface Order {
   source?: string;
   delivery_company: string;
   delivery_type: OrderDeliveryType;
+  hub_id?: string;
   shipping_status?: string | null;
   tracking_number?: string;
   /** Internal reference (e.g. ORD-YYYYMMDD-XXXX). */
@@ -89,6 +90,7 @@ export interface OrderFormValues {
   sub_status: OrderSubStatus | null;
   delivery_company: string;
   delivery_type: OrderDeliveryType;
+  hub_id: string;
   internal_tracking_id: string;
 }
 

@@ -32,6 +32,7 @@ create table if not exists public.orders (
   delivery_company text not null default '',
   delivery_type text not null default 'home'
     check (delivery_type in ('home', 'pickup-point')),
+  hub_id text not null default '',
   shipping_status text,
   tracking_number text not null default '',
   internal_tracking_id text not null default '',

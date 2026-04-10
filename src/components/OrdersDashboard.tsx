@@ -466,8 +466,9 @@ export function OrdersDashboard() {
 
   async function handleSaveOrder(
     values: OrderFormValues,
-    _previous: OrderSnapshot | null
+    previous: OrderSnapshot | null
   ) {
+    void previous;
     if (!isValidOrderState(values.status, values.sub_status)) {
       throw new Error("Invalid status / sub-status combination.");
     }
@@ -499,6 +500,7 @@ export function OrdersDashboard() {
           : editingOrder?.source ?? MANUAL_ORDER_SOURCE,
       delivery_company: values.delivery_company.trim(),
       delivery_type: values.delivery_type,
+      hub_id: values.hub_id.trim(),
       internal_tracking_id:
         formMode === "create"
           ? values.internal_tracking_id

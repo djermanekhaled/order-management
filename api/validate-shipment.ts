@@ -32,6 +32,7 @@ type DbOrder = {
   status: string;
   sub_status: string | null;
   delivery_type: string | null;
+  hub_id: string | null;
   wilaya_territory_id: string | null;
   commune_territory_id: string | null;
 };
@@ -184,6 +185,11 @@ function buildZrParcel(
   territory: { cityTerritoryId: string; districtTerritoryId: string },
   zrProduct: { productId: string; sku: string }
 ) {
+  const requestedDeliveryType = zrParcelDeliveryType(order.delivery_type);
+  const hubId = (order.hub_id ?? "").trim();
+  const deliveryType =
+    requestedDeliveryType === "pickup-point" && !hubId ? "home" : requestedDeliveryType;
+
   return {
     stockType: "local",
     externalId: order.id,
@@ -209,7 +215,8 @@ function buildZrParcel(
       },
     ],
     amount: Number(order.amount),
-    deliveryType: zrParcelDeliveryType(order.delivery_type),
+    deliveryType,
+    ...(deliveryType === "pickup-point" && hubId ? { HubId: hubId } : {}),
   };
 }
 
@@ -497,7 +504,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   const { data: orders, error: oErr } = await db
     .from("orders")
     .select(
-      "id, customer_name, phone, wilaya, commune, address, product, quantity, amount, status, sub_status, delivery_type, wilaya_territory_id, commune_territory_id"
+      "id, customer_name, phone, wilaya, commune, address, product, quantity, amount, status, sub_status, delivery_type, hub_id, wilaya_territory_id, commune_territory_id"
     )
     .in("id", orderIds);
 

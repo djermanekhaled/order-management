@@ -620,6 +620,131 @@ async function handleZrTerritoriesSearch(req: ApiRequest, res: ApiResponse): Pro
   res.status(200).json({ territories });
 }
 
+// --- zr-hubs ---
+
+function extractHubsArray(zrJson: unknown): Record<string, unknown>[] {
+  if (zrJson == null || typeof zrJson !== "object") return [];
+  if (Array.isArray(zrJson)) {
+    return zrJson.filter(
+      (x): x is Record<string, unknown> => x != null && typeof x === "object"
+    );
+  }
+  const o = zrJson as Record<string, unknown>;
+  const direct = o.hubs;
+  if (Array.isArray(direct)) {
+    return direct.filter(
+      (x): x is Record<string, unknown> => x != null && typeof x === "object"
+    );
+  }
+  const data = o.data;
+  if (Array.isArray(data)) {
+    return data.filter(
+      (x): x is Record<string, unknown> => x != null && typeof x === "object"
+    );
+  }
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    const d = data as Record<string, unknown>;
+    const inner = d.hubs ?? d.items ?? d.results;
+    if (Array.isArray(inner)) {
+      return inner.filter(
+        (x): x is Record<string, unknown> => x != null && typeof x === "object"
+      );
+    }
+  }
+  return [];
+}
+
+function hubId(row: Record<string, unknown>): string | null {
+  const v = row.id ?? row.hubId ?? row.hub_id;
+  if (typeof v === "string" && v.trim()) return v.trim();
+  if (typeof v === "number" && Number.isFinite(v)) return String(v);
+  return null;
+}
+
+function hubName(row: Record<string, unknown>): string {
+  const n =
+    (typeof row.name === "string" && row.name.trim()) ||
+    (typeof row.label === "string" && row.label.trim()) ||
+    (typeof row.title === "string" && row.title.trim()) ||
+    "";
+  return n;
+}
+
+async function handleZrHubs(req: ApiRequest, res: ApiResponse): Promise<void> {
+  if (req.method !== "GET") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  const q = parseRequestQuery(req);
+  const dcId = (q.deliveryCompanyId ?? q.delivery_company_id ?? "").trim();
+
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceRoleKey) {
+    res.status(500).json({ error: "Server not configured" });
+    return;
+  }
+  if (!getZrApiKeyFromEnv()) {
+    res.status(500).json({ error: "ZR_API_KEY is not configured" });
+    return;
+  }
+
+  const db = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  let xTenantId = (process.env.ZR_TENANT_ID ?? "").trim();
+  if (dcId) {
+    const { data: co, error: coErr } = await db
+      .from("delivery_companies")
+      .select("tenant_id, type, active")
+      .eq("id", dcId)
+      .single();
+    if (!coErr && co?.active && co.type === "zr_express" && (co.tenant_id ?? "").trim()) {
+      xTenantId = (co.tenant_id ?? "").trim();
+    }
+  }
+  if (!xTenantId) {
+    const { data: first } = await db
+      .from("delivery_companies")
+      .select("tenant_id")
+      .eq("active", true)
+      .eq("type", "zr_express")
+      .limit(1)
+      .maybeSingle();
+    if ((first?.tenant_id ?? "").trim()) xTenantId = (first?.tenant_id ?? "").trim();
+  }
+  if (!xTenantId) {
+    res.status(400).json({
+      error:
+        "No ZR tenant: add an active ZR Express delivery company, set ZR_TENANT_ID, or pass deliveryCompanyId.",
+    });
+    return;
+  }
+
+  const out = await zrRequestWithAuthVariants("/hubs", { method: "GET" }, xTenantId, {
+    logPrefix: "[zr-hubs]",
+  });
+  if (!out.res.ok) {
+    res.status(502).json({
+      error: zrExpressErrorMessage(out.res.status, out.json, out.text),
+      zrStatus: out.res.status,
+    });
+    return;
+  }
+
+  const rows = extractHubsArray(out.json);
+  const hubs: { id: string; name: string }[] = [];
+  for (const row of rows) {
+    const id = hubId(row);
+    const name = hubName(row);
+    if (id && name) hubs.push({ id, name });
+  }
+  hubs.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  res.status(200).json({ hubs });
+}
+
 // --- woo-webhook ---
 
 function rawBodyString(req: ApiRequest): string | null {
@@ -886,6 +1011,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
       return;
     case "zr-territories-search":
       await handleZrTerritoriesSearch(req, res);
+      return;
+    case "zr-hubs":
+      await handleZrHubs(req, res);
       return;
     case "woo-webhook":
       await handleWooWebhook(req, res);

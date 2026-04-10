@@ -41,6 +41,7 @@ const emptyForm: OrderFormValues = {
   sub_status: null,
   delivery_company: "",
   delivery_type: "home",
+  hub_id: "",
   internal_tracking_id: "",
 };
 
@@ -110,6 +111,9 @@ export function OrderFormModal({
   const [territoryListsLoading, setTerritoryListsLoading] = useState(false);
   const [communesLoading, setCommunesLoading] = useState(false);
   const [territoryListsError, setTerritoryListsError] = useState<string | null>(null);
+  const [hubOptions, setHubOptions] = useState<{ id: string; name: string }[]>([]);
+  const [hubsLoading, setHubsLoading] = useState(false);
+  const [hubsError, setHubsError] = useState<string | null>(null);
   const [picklistsLoading, setPicklistsLoading] = useState(false);
   const [algeriaCommunesRows, setAlgeriaCommunesRows] = useState<
     { wilaya_code: string; name: string }[] | null
@@ -341,6 +345,57 @@ export function OrderFormModal({
   }, [open, zrCompanyIdForTerritories]);
 
   useEffect(() => {
+    const needsHubs =
+      open && zrCompanyIdForTerritories && values.delivery_type === "pickup-point";
+    if (!needsHubs) {
+      setHubOptions([]);
+      setHubsError(null);
+      setHubsLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setHubsLoading(true);
+    setHubsError(null);
+    void fetch(
+      appApiUrl(
+        `/api/handler?action=zr-hubs&deliveryCompanyId=${encodeURIComponent(
+          zrCompanyIdForTerritories
+        )}`
+      ),
+      { method: "GET" }
+    )
+      .then(async (res) => {
+        const data = (await res.json()) as {
+          error?: string;
+          hubs?: { id: string; name: string }[];
+        };
+        if (cancelled) return;
+        if (!res.ok) {
+          throw new Error(
+            typeof data.error === "string" && data.error.trim()
+              ? data.error
+              : `Hubs request failed (${res.status})`
+          );
+        }
+        setHubOptions(Array.isArray(data.hubs) ? data.hubs : []);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setHubOptions([]);
+          setHubsError(e instanceof Error ? e.message : "Could not load pickup hubs.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setHubsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, zrCompanyIdForTerritories, values.delivery_type]);
+
+  useEffect(() => {
     if (!open || !zrCompanyIdForTerritories || !values.wilaya_territory_id.trim()) {
       setCommuneTerritoryOptions([]);
       return;
@@ -486,6 +541,7 @@ export function OrderFormModal({
             : initialOrder.sub_status ?? null,
         delivery_company: initialOrder.delivery_company ?? "",
         delivery_type: initialOrder.delivery_type ?? "home",
+        hub_id: initialOrder.hub_id ?? "",
         internal_tracking_id: initialOrder.internal_tracking_id ?? "",
         wilaya_territory_id: initialOrder.wilaya_territory_id ?? "",
         commune_territory_id: initialOrder.commune_territory_id ?? "",
@@ -514,6 +570,10 @@ export function OrderFormModal({
       }
       if (!values.commune_territory_id.trim() || !values.commune.trim()) {
         setLocalError("Please select a commune from the ZR Express list.");
+        return;
+      }
+      if (values.delivery_type === "pickup-point" && !values.hub_id.trim()) {
+        setLocalError("Please select a pickup hub for Stop desk delivery.");
         return;
       }
     } else if (locationInputMode === "domestic") {
@@ -847,6 +907,10 @@ export function OrderFormModal({
                   setValues((v) => ({
                     ...v,
                     delivery_type: e.target.value as OrderDeliveryType,
+                    hub_id:
+                      (e.target.value as OrderDeliveryType) === "pickup-point"
+                        ? v.hub_id
+                        : "",
                   }))
                 }
                 className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"
@@ -855,6 +919,34 @@ export function OrderFormModal({
                 <option value="pickup-point">Stop desk</option>
               </select>
             </div>
+            {locationInputMode === "zr" && values.delivery_type === "pickup-point" ? (
+              <div>
+                <label className="block text-sm font-medium text-slate-300">
+                  Pickup Hub (ZR Express)
+                </label>
+                <select
+                  required
+                  value={values.hub_id}
+                  disabled={hubsLoading}
+                  onChange={(e) =>
+                    setValues((v) => ({ ...v, hub_id: e.target.value }))
+                  }
+                  className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <option value="">
+                    {hubsLoading ? "Loading hubs…" : "Select pickup hub"}
+                  </option>
+                  {hubOptions.map((h) => (
+                    <option key={h.id} value={h.id}>
+                      {h.name}
+                    </option>
+                  ))}
+                </select>
+                {hubsError ? (
+                  <p className="mt-1 text-xs text-rose-300">{hubsError}</p>
+                ) : null}
+              </div>
+            ) : null}
             <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-slate-300">
                 Address
