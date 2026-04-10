@@ -1,8 +1,10 @@
 export type SalesChannelStatus = "active" | "inactive";
+export type SalesChannelPlatform = "woocommerce" | "shopify" | "google_sheet";
 
 export interface SalesChannel {
   id: string;
   name: string;
+  platform: SalesChannelPlatform;
   store_url: string;
   consumer_key: string;
   consumer_secret: string;

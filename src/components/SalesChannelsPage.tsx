@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
-import type { SalesChannel, SalesChannelStatus } from "../types/salesChannel";
+import type {
+  SalesChannel,
+  SalesChannelPlatform,
+  SalesChannelStatus,
+} from "../types/salesChannel";
 import { SalesChannelModal } from "./SalesChannelModal";
 
 function appApiUrl(path: string): string {
@@ -29,6 +33,30 @@ async function registerWooWebhookForChannel(channelId: string): Promise<void> {
   }
 }
 
+function platformMeta(platform: SalesChannelPlatform): {
+  label: string;
+  logoUrl: string;
+} {
+  if (platform === "shopify") {
+    return {
+      label: "Shopify",
+      logoUrl: "https://cdn.simpleicons.org/shopify/95BF47",
+    };
+  }
+  if (platform === "google_sheet") {
+    return {
+      label: "Google Sheets",
+      logoUrl:
+        "https://upload.wikimedia.org/wikipedia/commons/3/30/Google_Sheets_logo_%282014-2020%29.svg",
+    };
+  }
+  return {
+    label: "WooCommerce",
+    logoUrl:
+      "https://raw.githubusercontent.com/woocommerce/woocommerce/trunk/assets/images/woocommerce_logo.svg",
+  };
+}
+
 interface SalesChannelsPageProps {
   channelModalOpen: boolean;
   onChannelModalOpen: () => void;
@@ -53,7 +81,7 @@ export function SalesChannelsPage({
     const { data, error: qErr } = await supabase
       .from("sales_channels")
       .select(
-        "id, name, store_url, consumer_key, consumer_secret, status, last_synced_at, woo_webhook_id, created_at, updated_at"
+        "id, name, platform, store_url, consumer_key, consumer_secret, status, last_synced_at, woo_webhook_id, created_at, updated_at"
       )
       .order("created_at", { ascending: false });
     setLoading(false);
@@ -73,20 +101,22 @@ export function SalesChannelsPage({
     store_url: string;
     consumer_key: string;
     consumer_secret: string;
+    platform: SalesChannelPlatform;
   }) {
     const { data: inserted, error: insErr } = await supabase
       .from("sales_channels")
       .insert({
         name: row.name,
+        platform: row.platform,
         store_url: row.store_url,
         consumer_key: row.consumer_key,
         consumer_secret: row.consumer_secret,
         status: "active",
       })
-      .select("id")
+      .select("id, platform")
       .single();
     if (insErr) throw new Error(insErr.message);
-    if (inserted?.id) {
+    if (inserted?.id && inserted.platform === "woocommerce") {
       try {
         await registerWooWebhookForChannel(inserted.id);
       } catch (e) {
@@ -110,7 +140,8 @@ export function SalesChannelsPage({
       setError(upErr.message);
       return;
     }
-    if (next === "active") {
+    const current = channels.find((c) => c.id === id);
+    if (next === "active" && current?.platform === "woocommerce") {
       try {
         await registerWooWebhookForChannel(id);
       } catch (e) {
@@ -201,6 +232,7 @@ export function SalesChannelsPage({
             <thead>
               <tr className="border-b border-slate-800/80 text-xs uppercase tracking-wider text-slate-500">
                 <th className="px-5 py-3 font-medium">Name</th>
+                <th className="px-5 py-3 font-medium">Source</th>
                 <th className="px-5 py-3 font-medium">Store URL</th>
                 <th className="px-5 py-3 font-medium">Import</th>
                 <th className="px-5 py-3 font-medium">Status</th>
@@ -213,6 +245,17 @@ export function SalesChannelsPage({
                   <tr key={ch.id} className="hover:bg-slate-800/20">
                     <td className="px-5 py-3 font-medium text-slate-100">
                       {ch.name}
+                    </td>
+                    <td className="px-5 py-3 text-slate-300">
+                      <span className="inline-flex items-center gap-2">
+                        <img
+                          src={platformMeta(ch.platform).logoUrl}
+                          alt={`${platformMeta(ch.platform).label} logo`}
+                          className="h-4 w-4 object-contain"
+                          loading="lazy"
+                        />
+                        <span>{platformMeta(ch.platform).label}</span>
+                      </span>
                     </td>
                     <td className="max-w-[280px] truncate px-5 py-3 text-slate-400">
                       <a

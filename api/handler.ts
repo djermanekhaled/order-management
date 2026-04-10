@@ -163,7 +163,7 @@ async function handleRegisterWooWebhook(req: ApiRequest, res: ApiResponse): Prom
   const { data: channel, error: chErr } = await db
     .from("sales_channels")
     .select(
-      "id, name, store_url, consumer_key, consumer_secret, status, woo_webhook_id"
+      "id, name, platform, store_url, consumer_key, consumer_secret, status, woo_webhook_id"
     )
     .eq("id", id)
     .single();
@@ -174,6 +174,10 @@ async function handleRegisterWooWebhook(req: ApiRequest, res: ApiResponse): Prom
   }
   if (channel.status !== "active") {
     res.status(400).json({ error: "Channel must be active to register a webhook" });
+    return;
+  }
+  if (channel.platform !== "woocommerce") {
+    res.status(400).json({ error: "Webhook registration is only supported for WooCommerce channels" });
     return;
   }
 

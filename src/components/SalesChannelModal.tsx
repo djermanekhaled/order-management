@@ -37,7 +37,7 @@ interface SalesChannelModalProps {
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
-  insert: (row: typeof empty) => Promise<void>;
+  insert: (row: typeof empty & { platform: Platform }) => Promise<void>;
 }
 
 export function SalesChannelModal({
@@ -82,6 +82,7 @@ export function SalesChannelModal({
         store_url: values.store_url.trim(),
         consumer_key: values.consumer_key.trim(),
         consumer_secret: values.consumer_secret.trim(),
+        platform: "woocommerce",
       });
       resetModalState();
       onSaved();

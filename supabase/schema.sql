@@ -68,6 +68,8 @@ create index if not exists idx_order_status_history_order_id
 create table if not exists public.sales_channels (
   id uuid primary key default gen_random_uuid(),
   name text not null,
+  platform text not null default 'woocommerce'
+    check (platform in ('woocommerce', 'shopify', 'google_sheet')),
   store_url text not null,
   consumer_key text not null,
   consumer_secret text not null,
