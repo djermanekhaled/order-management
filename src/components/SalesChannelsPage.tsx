@@ -52,8 +52,7 @@ function platformMeta(platform: SalesChannelPlatform): {
   }
   return {
     label: "WooCommerce",
-    logoUrl:
-      "https://raw.githubusercontent.com/woocommerce/woocommerce/trunk/assets/images/woocommerce_logo.svg",
+    logoUrl: "/woo-logo.png",
   };
 }
 

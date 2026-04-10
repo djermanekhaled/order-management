@@ -17,8 +17,7 @@ const PLATFORM_OPTIONS: Array<{
   {
     id: "woocommerce",
     name: "WooCommerce",
-    logoUrl:
-      "https://raw.githubusercontent.com/woocommerce/woocommerce/trunk/assets/images/woocommerce_logo.svg",
+    logoUrl: "/woo-logo.png",
   },
   {
     id: "shopify",
@@ -132,27 +131,14 @@ export function SalesChannelModal({
                   className="group rounded-xl border border-slate-700 bg-slate-950 px-4 py-4 text-center text-slate-100 transition hover:-translate-y-0.5 hover:border-indigo-500/60 hover:bg-slate-900"
                 >
                   <div className="flex min-h-16 items-center justify-center">
-                    {platform.id === "woocommerce" ? (
-                      <object
-                        type="image/svg+xml"
-                        data={platform.logoUrl}
-                        aria-label="WooCommerce logo"
-                        className="block h-8 w-full max-w-[170px]"
-                      >
-                        <div className="text-base font-extrabold tracking-tight text-[#7f54b3]">
-                          WooCommerce
-                        </div>
-                      </object>
-                    ) : (
-                      <div className="block">
-                        <img
-                          src={platform.logoUrl}
-                          alt={`${platform.name} logo`}
-                          className="block h-10 w-auto max-w-full object-contain"
-                          loading="lazy"
-                        />
-                      </div>
-                    )}
+                    <div className="block">
+                      <img
+                        src={platform.logoUrl}
+                        alt={`${platform.name} logo`}
+                        className="block h-10 w-auto max-w-full object-contain"
+                        loading="lazy"
+                      />
+                    </div>
                   </div>
                   <div className="mt-3 block text-sm font-semibold leading-5 text-slate-200 group-hover:text-white">
                     {platform.name}
