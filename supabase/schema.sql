@@ -286,7 +286,9 @@ create table if not exists public.delivery_companies (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   type text not null default 'zr_express'
-    check (type = 'zr_express'),
+    check (type in ('zr_express', 'yalidine', 'noest', 'dhd', 'maystro')),
+  provider text not null default 'zr_express'
+    check (provider in ('zr_express', 'yalidine', 'noest', 'dhd', 'maystro')),
   secret_key text not null,
   tenant_id text not null,
   active boolean not null default true,

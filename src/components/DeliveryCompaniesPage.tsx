@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
-import type { DeliveryCompany } from "../types/deliveryCompany";
+import type {
+  DeliveryCompany,
+  DeliveryCompanyProvider,
+  DeliveryCompanyType,
+} from "../types/deliveryCompany";
 import { DeliveryCompanyModal } from "./DeliveryCompanyModal";
 
 interface DeliveryCompaniesPageProps {
@@ -33,6 +37,10 @@ async function registerZrWebhookForCompany(deliveryCompanyId: string): Promise<v
         : `Webhook registration failed (${res.status})`
     );
   }
+}
+
+function providerToType(provider: DeliveryCompanyProvider): DeliveryCompanyType {
+  return provider;
 }
 
 export function DeliveryCompaniesPage({
@@ -68,6 +76,7 @@ export function DeliveryCompaniesPage({
     name: string;
     secret_key: string;
     tenant_id: string;
+    provider: DeliveryCompanyProvider;
   }) {
     const { data: inserted, error: insErr } = await supabase
       .from("delivery_companies")
@@ -75,15 +84,16 @@ export function DeliveryCompaniesPage({
         name: row.name,
         secret_key: row.secret_key,
         tenant_id: row.tenant_id,
-        type: "zr_express",
+        type: providerToType(row.provider),
+        provider: row.provider,
         active: true,
       })
-      .select("id")
+      .select("id, provider")
       .single();
     if (insErr) throw new Error(insErr.message);
     await loadCompanies();
     onCompaniesChanged?.();
-    if (inserted?.id) {
+    if (inserted?.id && inserted.provider === "zr_express") {
       try {
         await registerZrWebhookForCompany(inserted.id);
       } catch (e) {
