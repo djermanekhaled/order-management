@@ -29,6 +29,7 @@ function Chevron({ open }: { open: boolean }) {
 }
 
 export type AppView =
+  | "dashboard"
   | "orders"
   | "tracking_orders"
   | "sales_channels"
@@ -162,6 +163,25 @@ export function AppSidebar({
         <div className="flex flex-1 flex-col items-center gap-3 p-3">
           <button
             type="button"
+            onClick={() => onViewChange("dashboard")}
+            className={`flex flex-col items-center gap-1 rounded-xl border p-3 ${
+              activeView === "dashboard"
+                ? "border-indigo-500/40 bg-indigo-600/20 text-white"
+                : "border-slate-800 bg-slate-900/60 text-slate-300 hover:border-indigo-500/40 hover:text-white"
+            }`}
+            title="Dashboard"
+          >
+            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-600/30 text-cyan-200">
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 13h7V3H3v10zm0 8h7v-6H3v6zm11 0h7V11h-7v10zm0-18v6h7V3h-7z" />
+              </svg>
+            </span>
+            <span className="max-w-[4rem] text-center text-[10px] font-medium leading-tight">
+              Dashboard
+            </span>
+          </button>
+          <button
+            type="button"
             onClick={onToggleCollapsed}
             className="flex flex-col items-center gap-1 rounded-xl border border-slate-800 bg-slate-900/60 p-3 text-slate-300 hover:border-indigo-500/40 hover:text-white"
             title="Expand to browse orders"
@@ -189,6 +209,27 @@ export function AppSidebar({
         </div>
       ) : (
         <nav className="flex-1 overflow-y-auto p-2" aria-label="Main">
+          <div className="mb-2 rounded-xl border border-slate-800/60 bg-slate-900/40 p-1">
+            <button
+              type="button"
+              onClick={() => onViewChange("dashboard")}
+              className={`flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-sm font-medium transition ${
+                activeView === "dashboard"
+                  ? "bg-indigo-600/25 text-white ring-1 ring-indigo-500/40"
+                  : "text-slate-200 hover:bg-slate-800/60"
+              }`}
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-600/30 text-cyan-200">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 13h7V3H3v10zm0 8h7v-6H3v6zm11 0h7V11h-7v10zm0-18v6h7V3h-7z" />
+                  </svg>
+                </span>
+                <span className="truncate">Dashboard</span>
+              </span>
+            </button>
+          </div>
+
           <div className="rounded-xl border border-slate-800/60 bg-slate-900/40 p-1">
             <button
               type="button"
@@ -261,9 +302,12 @@ export function AppSidebar({
           <div className="mt-2 rounded-xl border border-slate-800/60 bg-slate-900/40 p-1">
             <button
               type="button"
-              onClick={() => onNavKey("follow")}
+              onClick={() => {
+                onViewChange("tracking_orders");
+                onNavKey("follow");
+              }}
               className={`flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-sm font-medium transition ${
-                navKey === "follow"
+                activeView === "tracking_orders" && navKey === "follow"
                   ? "bg-indigo-600/25 text-white ring-1 ring-indigo-500/40"
                   : "text-slate-200 hover:bg-slate-800/60"
               }`}

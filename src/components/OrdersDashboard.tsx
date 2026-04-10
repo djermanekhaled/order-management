@@ -36,6 +36,7 @@ import type {
 } from "../types/order";
 import type { DeliveryCompany } from "../types/deliveryCompany";
 import { AppSidebar } from "./AppSidebar";
+import { DashboardPage } from "./DashboardPage";
 import { DeliveryCompaniesPage } from "./DeliveryCompaniesPage";
 import { OrderFormModal } from "./OrderFormModal";
 import { OrderHistoryPanel } from "./OrderHistoryPanel";
@@ -135,12 +136,14 @@ export function OrdersDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sidebarView, setSidebarView] = useState<
+    | "dashboard"
     | "orders"
     | "sales_channels"
     | "products"
     | "delivery_companies"
     | "inventory"
-  >("orders");
+    | "tracking_orders"
+  >("dashboard");
   const [channelModalOpen, setChannelModalOpen] = useState(false);
   const [productModalOpen, setProductModalOpen] = useState(false);
   const [productFreshKey, setProductFreshKey] = useState(0);
@@ -795,13 +798,15 @@ export function OrdersDashboard() {
         orders={orders}
         navKey={navKey}
         onNavKey={(k) => {
-          setSidebarView("orders");
+          setSidebarView(k === "follow" ? "tracking_orders" : "orders");
           setNavKey(k);
         }}
         collapsed={sidebarCollapsed}
         onToggleCollapsed={() => setSidebarCollapsed((c) => !c)}
         activeView={
-          sidebarView === "sales_channels"
+          sidebarView === "dashboard"
+            ? "dashboard"
+            : sidebarView === "sales_channels"
             ? "sales_channels"
             : sidebarView === "products"
               ? "products"
@@ -809,14 +814,21 @@ export function OrdersDashboard() {
                 ? "delivery_companies"
                 : sidebarView === "inventory"
                   ? "inventory"
+                  : sidebarView === "tracking_orders"
+                    ? "tracking_orders"
                   : "orders"
         }
         onViewChange={(v) => {
-          if (v === "sales_channels") setSidebarView("sales_channels");
+          if (v === "dashboard") setSidebarView("dashboard");
+          else if (v === "sales_channels") setSidebarView("sales_channels");
           else if (v === "products") setSidebarView("products");
           else if (v === "delivery_companies")
             setSidebarView("delivery_companies");
           else if (v === "inventory") setSidebarView("inventory");
+          else if (v === "tracking_orders") {
+            setSidebarView("tracking_orders");
+            setNavKey("follow");
+          }
           else setSidebarView("orders");
         }}
         salesChannelCount={channelCount}
@@ -839,7 +851,9 @@ export function OrdersDashboard() {
       />
 
       <div className="min-w-0 flex-1 px-4 py-8 sm:px-6 lg:px-10">
-        {sidebarView === "sales_channels" ? (
+        {sidebarView === "dashboard" ? (
+          <DashboardPage />
+        ) : sidebarView === "sales_channels" ? (
           <SalesChannelsPage
             channelModalOpen={channelModalOpen}
             onChannelModalOpen={() => setChannelModalOpen(true)}
