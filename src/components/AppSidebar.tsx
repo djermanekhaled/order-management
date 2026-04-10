@@ -120,47 +120,61 @@ export function AppSidebar({
         collapsed ? "w-[72px]" : "w-[272px]"
       }`}
     >
-      <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 p-3">
-        {!collapsed ? (
-          <img
-            src="/logo.png"
-            alt="COD Manager"
-            className="block max-h-[60px] w-auto"
-          />
-        ) : (
-          <span />
-        )}
-        <button
-          type="button"
-          onClick={onToggleCollapsed}
-          className={`rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white ${
-            collapsed ? "mx-auto" : ""
+      <div
+        className={`flex flex-col gap-2 border-b border-slate-800/80 p-3 ${
+          collapsed ? "items-center" : ""
+        }`}
+      >
+        <div
+          className={`flex min-h-[48px] w-full items-center ${
+            collapsed ? "min-h-0 justify-center" : "justify-start"
           }`}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          <svg
-            className="h-5 w-5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
+          {!collapsed ? (
+            <img
+              src="/logo.png"
+              alt="COD Manager"
+              className="block h-12 w-auto max-w-full"
+            />
+          ) : (
+            <img
+              src="/logo-icon.png"
+              alt="COD Manager"
+              className="block h-9 w-auto"
+            />
+          )}
+        </div>
+        <div className={`flex w-full ${collapsed ? "justify-center" : "justify-end"}`}>
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
-            {collapsed ? (
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M13 5l7 7-7 7M5 5l7 7-7 7"
-              />
-            ) : (
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
-              />
-            )}
-          </svg>
-        </button>
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              {collapsed ? (
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M13 5l7 7-7 7M5 5l7 7-7 7"
+                />
+              ) : (
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
+                />
+              )}
+            </svg>
+          </button>
+        </div>
       </div>
 
       {collapsed ? (
@@ -179,9 +193,6 @@ export function AppSidebar({
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 13h7V3H3v10zm0 8h7v-6H3v6zm11 0h7V11h-7v10zm0-18v6h7V3h-7z" />
               </svg>
-            </span>
-            <span className="max-w-[4rem] text-center text-[10px] font-medium leading-tight">
-              Dashboard
             </span>
           </button>
           <button
