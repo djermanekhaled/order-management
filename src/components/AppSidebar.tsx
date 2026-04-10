@@ -121,10 +121,14 @@ export function AppSidebar({
       }`}
     >
       <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 p-3">
-        {!collapsed && (
-          <span className="text-sm font-semibold tracking-tight text-white">
-            Dashboard
-          </span>
+        {!collapsed ? (
+          <img
+            src="/logo.png"
+            alt="COD Manager"
+            className="block max-h-[60px] w-auto"
+          />
+        ) : (
+          <span />
         )}
         <button
           type="button"
