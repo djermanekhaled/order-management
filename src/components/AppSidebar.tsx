@@ -30,6 +30,7 @@ function Chevron({ open }: { open: boolean }) {
 
 export type AppView =
   | "orders"
+  | "tracking_orders"
   | "sales_channels"
   | "products"
   | "delivery_companies"
@@ -236,12 +237,6 @@ export function AppSidebar({
                   count={counts.confirmed}
                 />
                 <NavRow
-                  active={navKey === "follow"}
-                  onClick={() => onNavKey("follow")}
-                  label={statusLabel("follow")}
-                  count={counts.follow}
-                />
-                <NavRow
                   active={navKey === "completed"}
                   onClick={() => onNavKey("completed")}
                   label={statusLabel("completed")}
@@ -261,6 +256,38 @@ export function AppSidebar({
                 />
               </div>
             )}
+          </div>
+
+          <div className="mt-2 rounded-xl border border-slate-800/60 bg-slate-900/40 p-1">
+            <button
+              type="button"
+              onClick={() => onNavKey("follow")}
+              className={`flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-sm font-medium transition ${
+                navKey === "follow"
+                  ? "bg-indigo-600/25 text-white ring-1 ring-indigo-500/40"
+                  : "text-slate-200 hover:bg-slate-800/60"
+              }`}
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600/30 text-emerald-200">
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M3 7h11v8H3V7zm11 2h3l4 4v2h-7V9zM7 19a2 2 0 100-4 2 2 0 000 4zm10 0a2 2 0 100-4 2 2 0 000 4z"
+                    />
+                  </svg>
+                </span>
+                <span className="truncate">Tracking Orders</span>
+              </span>
+              <Badge n={counts.follow} />
+            </button>
           </div>
 
           <div className="mt-2 rounded-xl border border-slate-800/60 bg-slate-900/40 p-1">
