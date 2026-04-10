@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { WILAYAS_58_LABELS } from "../constants/algeriaWilayas58";
 import { supabase } from "../lib/supabase";
 
 type DashboardOrderRow = {
@@ -42,7 +43,6 @@ export function DashboardPage() {
   const [sourceFilter, setSourceFilter] = useState("");
 
   const [productOptions, setProductOptions] = useState<string[]>([]);
-  const [wilayaOptions, setWilayaOptions] = useState<string[]>([]);
   const [deliveryCompanyOptions, setDeliveryCompanyOptions] = useState<string[]>([]);
   const [sourceOptions, setSourceOptions] = useState<string[]>(["Manual"]);
 
@@ -50,19 +50,13 @@ export function DashboardPage() {
     let cancelled = false;
     void Promise.all([
       supabase.from("products").select("name").eq("active", true).order("name"),
-      supabase.from("orders").select("wilaya").order("wilaya"),
       supabase.from("delivery_companies").select("name").eq("active", true).order("name"),
       supabase.from("sales_channels").select("name").order("name"),
-    ]).then(([pRes, wRes, dcRes, sRes]) => {
+    ]).then(([pRes, dcRes, sRes]) => {
       if (cancelled) return;
       if (!pRes.error && pRes.data) {
         setProductOptions(
           [...new Set((pRes.data as { name: string }[]).map((x) => x.name.trim()).filter(Boolean))]
-        );
-      }
-      if (!wRes.error && wRes.data) {
-        setWilayaOptions(
-          [...new Set((wRes.data as { wilaya: string }[]).map((x) => (x.wilaya ?? "").trim()).filter(Boolean))]
         );
       }
       if (!dcRes.error && dcRes.data) {
@@ -138,17 +132,6 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <section className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-2xl border border-indigo-500/30 bg-indigo-950/20 p-5 ring-1 ring-indigo-500/20">
-          <p className="text-xs uppercase tracking-wider text-indigo-300">Taux de Confirmation</p>
-          <p className="mt-2 text-3xl font-semibold text-white">{stats.confirmationRate.toFixed(1)}%</p>
-        </div>
-        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-950/20 p-5 ring-1 ring-emerald-500/20">
-          <p className="text-xs uppercase tracking-wider text-emerald-300">Taux de Livraison</p>
-          <p className="mt-2 text-3xl font-semibold text-white">{stats.deliveryRate.toFixed(1)}%</p>
-        </div>
-      </section>
-
       <section className="rounded-2xl border border-slate-800/80 bg-slate-900/50 p-4 ring-1 ring-white/5">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100" />
@@ -159,7 +142,7 @@ export function DashboardPage() {
           </select>
           <select value={wilayaFilter} onChange={(e) => setWilayaFilter(e.target.value)} className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100">
             <option value="">All wilayas</option>
-            {wilayaOptions.map((x) => <option key={x} value={x}>{x}</option>)}
+            {WILAYAS_58_LABELS.map((x) => <option key={x} value={x}>{x}</option>)}
           </select>
           <select value={deliveryCompanyFilter} onChange={(e) => setDeliveryCompanyFilter(e.target.value)} className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100">
             <option value="">All delivery companies</option>
@@ -169,6 +152,17 @@ export function DashboardPage() {
             <option value="">All sources</option>
             {sourceOptions.map((x) => <option key={x} value={x}>{x}</option>)}
           </select>
+        </div>
+      </section>
+
+      <section className="grid gap-4 sm:grid-cols-2">
+        <div className="rounded-2xl border border-indigo-500/30 bg-indigo-950/20 p-5 ring-1 ring-indigo-500/20">
+          <p className="text-xs uppercase tracking-wider text-indigo-300">Taux de Confirmation</p>
+          <p className="mt-2 text-3xl font-semibold text-white">{stats.confirmationRate.toFixed(1)}%</p>
+        </div>
+        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-950/20 p-5 ring-1 ring-emerald-500/20">
+          <p className="text-xs uppercase tracking-wider text-emerald-300">Taux de Livraison</p>
+          <p className="mt-2 text-3xl font-semibold text-white">{stats.deliveryRate.toFixed(1)}%</p>
         </div>
       </section>
 
