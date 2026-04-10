@@ -75,12 +75,16 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     .eq("id", channelId)
     .single();
 
+  console.log("SYNC START - channels found:", channel ? 1 : 0);
+
   if (chErr || !channel) {
+    console.log("SYNC ERROR:", chErr?.message ?? "Unknown channel");
     res.status(404).json({ error: "Unknown channel" });
     return;
   }
 
   const base = channel.store_url.replace(/\/+$/, "");
+  console.log("FETCHING from WooCommerce:", base);
   const wcUrl = new URL(`${base}/wp-json/wc/v3/orders`);
   wcUrl.searchParams.set("status", "pending");
   wcUrl.searchParams.set("per_page", String(PER_PAGE));
@@ -108,6 +112,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     try {
       wcRes = await fetch(wcUrl.toString(), { method: "GET", headers: { Accept: "application/json" } });
     } catch (e) {
+      console.log("SYNC ERROR:", e instanceof Error ? e.message : String(e));
       res.status(502).json({
         error: "Failed to reach WooCommerce",
         details: e instanceof Error ? e.message : String(e),
@@ -117,6 +122,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
     if (!wcRes.ok) {
       const snippet = (await wcRes.text()).slice(0, 800);
+      console.log("SYNC ERROR:", `WooCommerce request failed (${wcRes.status}) ${snippet}`);
       res.status(502).json({
         error: "WooCommerce request failed",
         status: wcRes.status,
@@ -129,11 +135,13 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     try {
       const parsed: unknown = await wcRes.json();
       if (!Array.isArray(parsed)) {
+        console.log("SYNC ERROR:", "Unexpected WooCommerce response (not an array)");
         res.status(502).json({ error: "Unexpected WooCommerce response (not an array)" });
         return;
       }
       orders = parsed as WooOrderPayload[];
     } catch {
+      console.log("SYNC ERROR:", "Invalid JSON from WooCommerce");
       res.status(502).json({ error: "Invalid JSON from WooCommerce" });
       return;
     }
@@ -180,9 +188,13 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     .eq("id", channelId);
 
   if (syncErr) {
+    console.log("SYNC ERROR:", syncErr.message);
     res.status(500).json({ error: syncErr.message });
     return;
   }
+
+  console.log("WOO ORDERS FETCHED:", fetched);
+  console.log("ORDERS INSERTED:", imported);
 
   res.status(200).json({
     ok: true,
