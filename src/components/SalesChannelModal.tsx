@@ -7,6 +7,8 @@ const empty = {
   consumer_secret: "",
 };
 
+type Platform = "woocommerce" | "shopify" | "google_sheet";
+
 interface SalesChannelModalProps {
   open: boolean;
   onClose: () => void;
@@ -23,6 +25,18 @@ export function SalesChannelModal({
   const [values, setValues] = useState(empty);
   const [saving, setSaving] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [selectedPlatform, setSelectedPlatform] = useState<Platform | null>(null);
+
+  function resetModalState() {
+    setValues(empty);
+    setLocalError(null);
+    setSelectedPlatform(null);
+  }
+
+  function handleClose() {
+    resetModalState();
+    onClose();
+  }
 
   if (!open) return null;
 
@@ -45,7 +59,7 @@ export function SalesChannelModal({
         consumer_key: values.consumer_key.trim(),
         consumer_secret: values.consumer_secret.trim(),
       });
-      setValues(empty);
+      resetModalState();
       onSaved();
       onClose();
     } catch (err) {
@@ -66,7 +80,7 @@ export function SalesChannelModal({
         type="button"
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         aria-label="Close"
-        onClick={onClose}
+        onClick={handleClose}
       />
       <div className="relative max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-slate-700/80 bg-slate-900 shadow-2xl sm:rounded-2xl">
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-800 bg-slate-900/95 px-5 py-4 backdrop-blur">
@@ -75,91 +89,164 @@ export function SalesChannelModal({
           </h2>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white"
           >
             ✕
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4 px-5 py-5">
-          {localError && (
-            <div className="rounded-lg border border-rose-500/40 bg-rose-950/50 px-3 py-2 text-sm text-rose-200">
-              {localError}
+        {!selectedPlatform ? (
+          <div className="space-y-4 px-5 py-5">
+            <p className="text-sm text-slate-400">Step 1: Choose a platform</p>
+            <div className="grid gap-3">
+              <button
+                type="button"
+                onClick={() => setSelectedPlatform("woocommerce")}
+                className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-left text-slate-100 hover:border-indigo-500/60 hover:bg-slate-900"
+              >
+                <p className="text-sm font-semibold">WooCommerce</p>
+                <p className="mt-1 text-xs text-slate-400">Connect with Store URL and REST API keys</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedPlatform("shopify")}
+                className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-left text-slate-100 hover:border-indigo-500/60 hover:bg-slate-900"
+              >
+                <p className="text-sm font-semibold">Shopify</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedPlatform("google_sheet")}
+                className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-left text-slate-100 hover:border-indigo-500/60 hover:bg-slate-900"
+              >
+                <p className="text-sm font-semibold">Google Sheet</p>
+              </button>
             </div>
-          )}
-          <div>
-            <label className="block text-sm font-medium text-slate-300">
-              Channel name
-            </label>
-            <input
-              required
-              value={values.name}
-              onChange={(e) => setValues((v) => ({ ...v, name: e.target.value }))}
-              className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"
-              placeholder="My WooCommerce store"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-300">
-              Store URL (WooCommerce)
-            </label>
-            <input
-              type="url"
-              required
-              value={values.store_url}
-              onChange={(e) =>
-                setValues((v) => ({ ...v, store_url: e.target.value }))
-              }
-              className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"
-              placeholder="https://example.com"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-300">
-              Consumer key
-            </label>
-            <input
-              required
-              autoComplete="off"
-              value={values.consumer_key}
-              onChange={(e) =>
-                setValues((v) => ({ ...v, consumer_key: e.target.value }))
-              }
-              className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-300">
-              Consumer secret
-            </label>
-            <input
-              type="password"
-              required
-              autoComplete="new-password"
-              value={values.consumer_secret}
-              onChange={(e) =>
-                setValues((v) => ({ ...v, consumer_secret: e.target.value }))
-              }
-              className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"
-            />
-          </div>
-          <div className="flex gap-3 pt-2">
             <button
               type="button"
-              onClick={onClose}
-              className="flex-1 rounded-xl border border-slate-600 py-2.5 text-sm font-medium text-slate-200 hover:bg-slate-800"
+              onClick={handleClose}
+              className="w-full rounded-xl border border-slate-600 py-2.5 text-sm font-medium text-slate-200 hover:bg-slate-800"
             >
               Cancel
             </button>
+          </div>
+        ) : selectedPlatform === "woocommerce" ? (
+          <form onSubmit={handleSubmit} className="space-y-4 px-5 py-5">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-slate-400">Step 2: WooCommerce details</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setLocalError(null);
+                  setSelectedPlatform(null);
+                }}
+                className="rounded-lg border border-slate-600 px-2.5 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
+              >
+                Back
+              </button>
+            </div>
+            {localError && (
+              <div className="rounded-lg border border-rose-500/40 bg-rose-950/50 px-3 py-2 text-sm text-rose-200">
+                {localError}
+              </div>
+            )}
+            <div>
+              <label className="block text-sm font-medium text-slate-300">
+                Channel name
+              </label>
+              <input
+                required
+                value={values.name}
+                onChange={(e) => setValues((v) => ({ ...v, name: e.target.value }))}
+                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"
+                placeholder="My WooCommerce store"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300">
+                Store URL (WooCommerce)
+              </label>
+              <input
+                type="url"
+                required
+                value={values.store_url}
+                onChange={(e) =>
+                  setValues((v) => ({ ...v, store_url: e.target.value }))
+                }
+                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"
+                placeholder="https://example.com"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300">
+                Consumer key
+              </label>
+              <input
+                required
+                autoComplete="off"
+                value={values.consumer_key}
+                onChange={(e) =>
+                  setValues((v) => ({ ...v, consumer_key: e.target.value }))
+                }
+                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300">
+                Consumer secret
+              </label>
+              <input
+                type="password"
+                required
+                autoComplete="new-password"
+                value={values.consumer_secret}
+                onChange={(e) =>
+                  setValues((v) => ({ ...v, consumer_secret: e.target.value }))
+                }
+                className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm text-slate-100 outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/30"
+              />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={handleClose}
+                className="flex-1 rounded-xl border border-slate-600 py-2.5 text-sm font-medium text-slate-200 hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="flex-1 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+              >
+                {saving ? "Saving…" : "Save channel"}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="space-y-4 px-5 py-5">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-slate-400">Step 2</p>
+              <button
+                type="button"
+                onClick={() => setSelectedPlatform(null)}
+                className="rounded-lg border border-slate-600 px-2.5 py-1 text-xs font-medium text-slate-200 hover:bg-slate-800"
+              >
+                Back
+              </button>
+            </div>
+            <div className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-4 text-sm text-slate-300">
+              {selectedPlatform === "shopify" ? "Shopify integration is coming soon." : "Google Sheet integration is coming soon."}
+            </div>
             <button
-              type="submit"
-              disabled={saving}
-              className="flex-1 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
+              type="button"
+              onClick={handleClose}
+              className="w-full rounded-xl border border-slate-600 py-2.5 text-sm font-medium text-slate-200 hover:bg-slate-800"
             >
-              {saving ? "Saving…" : "Save channel"}
+              Close
             </button>
           </div>
-        </form>
+        )}
       </div>
     </div>
   );
