@@ -154,21 +154,21 @@ export function AppSidebar({
       }`}
     >
       <div
-        className={`flex shrink-0 border-b border-slate-800/80 p-2 ${
-          collapsed ? "justify-center" : "px-3 py-2"
+        className={`box-border flex h-14 shrink-0 items-center border-b border-slate-800/80 px-4 py-3 ${
+          collapsed ? "justify-center" : "justify-start"
         }`}
       >
         {!collapsed ? (
           <img
             src="/logo.png"
             alt="COD Manager"
-            className="block max-h-[40px] w-auto max-w-full"
+            className="block h-8 w-auto max-w-full object-contain object-left"
           />
         ) : (
           <img
             src="/logo-icon.png"
             alt="COD Manager"
-            className="block max-h-[40px] w-auto"
+            className="block h-8 w-auto max-w-full object-contain"
           />
         )}
       </div>
