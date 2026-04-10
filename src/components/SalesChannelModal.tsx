@@ -9,6 +9,29 @@ const empty = {
 
 type Platform = "woocommerce" | "shopify" | "google_sheet";
 
+const PLATFORM_OPTIONS: Array<{
+  id: Platform;
+  name: string;
+  logoUrl: string;
+}> = [
+  {
+    id: "woocommerce",
+    name: "WooCommerce",
+    logoUrl: "https://upload.wikimedia.org/wikipedia/commons/2/2a/WooCommerce_logo.svg",
+  },
+  {
+    id: "shopify",
+    name: "Shopify",
+    logoUrl: "https://upload.wikimedia.org/wikipedia/commons/0/0e/Shopify_logo_2018.svg",
+  },
+  {
+    id: "google_sheet",
+    name: "Google Sheets",
+    logoUrl:
+      "https://upload.wikimedia.org/wikipedia/commons/3/30/Google_Sheets_logo_%282014-2020%29.svg",
+  },
+];
+
 interface SalesChannelModalProps {
   open: boolean;
   onClose: () => void;
@@ -98,29 +121,27 @@ export function SalesChannelModal({
         {!selectedPlatform ? (
           <div className="space-y-4 px-5 py-5">
             <p className="text-sm text-slate-400">Step 1: Choose a platform</p>
-            <div className="grid gap-3">
-              <button
-                type="button"
-                onClick={() => setSelectedPlatform("woocommerce")}
-                className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-left text-slate-100 hover:border-indigo-500/60 hover:bg-slate-900"
-              >
-                <p className="text-sm font-semibold">WooCommerce</p>
-                <p className="mt-1 text-xs text-slate-400">Connect with Store URL and REST API keys</p>
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedPlatform("shopify")}
-                className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-left text-slate-100 hover:border-indigo-500/60 hover:bg-slate-900"
-              >
-                <p className="text-sm font-semibold">Shopify</p>
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedPlatform("google_sheet")}
-                className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-left text-slate-100 hover:border-indigo-500/60 hover:bg-slate-900"
-              >
-                <p className="text-sm font-semibold">Google Sheet</p>
-              </button>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {PLATFORM_OPTIONS.map((platform) => (
+                <button
+                  key={platform.id}
+                  type="button"
+                  onClick={() => setSelectedPlatform(platform.id)}
+                  className="group rounded-xl border border-slate-700 bg-slate-950 px-4 py-4 text-center text-slate-100 transition hover:-translate-y-0.5 hover:border-indigo-500/60 hover:bg-slate-900"
+                >
+                  <div className="flex min-h-16 items-center justify-center">
+                    <img
+                      src={platform.logoUrl}
+                      alt={`${platform.name} logo`}
+                      className="max-h-10 w-auto object-contain"
+                      loading="lazy"
+                    />
+                  </div>
+                  <p className="mt-3 text-sm font-semibold text-slate-200 group-hover:text-white">
+                    {platform.name}
+                  </p>
+                </button>
+              ))}
             </div>
             <button
               type="button"
