@@ -793,7 +793,7 @@ export function OrdersDashboard() {
   const tableBusy = bulkWorking || bulkRowsWorking;
 
   return (
-    <div className="flex min-h-screen w-full flex-1">
+    <div className="relative min-h-screen w-full">
       <AppSidebar
         orders={orders}
         navKey={navKey}
@@ -850,7 +850,16 @@ export function OrdersDashboard() {
         inventoryCount={activeProductCount}
       />
 
-      <div className="min-w-0 flex-1 px-4 py-8 sm:px-6 lg:px-10">
+      <div
+        className={`flex min-h-screen min-w-0 flex-col transition-[margin-left] duration-200 ease-out ${
+          sidebarCollapsed ? "ml-[72px]" : "ml-[272px]"
+        }`}
+      >
+        <header
+          className="sticky top-0 z-20 flex h-10 max-h-[40px] shrink-0 items-center border-b border-slate-800/80 bg-slate-950/40 px-4 sm:px-6"
+          aria-label="Toolbar"
+        />
+        <div className="min-w-0 flex-1 px-4 py-8 sm:px-6 lg:px-10">
         {sidebarView === "dashboard" ? (
           <DashboardPage />
         ) : sidebarView === "sales_channels" ? (
@@ -1421,6 +1430,7 @@ export function OrdersDashboard() {
         />
           </>
         )}
+        </div>
       </div>
     </div>
   );

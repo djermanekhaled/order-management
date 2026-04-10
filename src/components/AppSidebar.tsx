@@ -116,7 +116,7 @@ export function AppSidebar({
 
   return (
     <aside
-      className={`flex shrink-0 flex-col border-r border-slate-800/80 bg-slate-950/90 backdrop-blur-sm transition-[width] duration-200 ease-out ${
+      className={`fixed left-0 top-0 z-30 flex h-screen flex-col border-r border-slate-800/80 bg-slate-950/90 backdrop-blur-sm transition-[width] duration-200 ease-out ${
         collapsed ? "w-[72px]" : "w-[272px]"
       }`}
     >
