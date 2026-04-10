@@ -153,7 +153,10 @@ export function SalesChannelModal({
                           setPlatformLogoSrc((prev) =>
                             prev.woocommerce === platform.fallbackLogoUrl
                               ? prev
-                              : { ...prev, woocommerce: platform.fallbackLogoUrl }
+                              : {
+                                  ...prev,
+                                  woocommerce: platform.fallbackLogoUrl ?? "",
+                                }
                           );
                         }
                       }}
