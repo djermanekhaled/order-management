@@ -49,6 +49,7 @@ type ChartRow = {
   confirmed: number;
   cancelled: number;
   confirmationRate: number;
+  deliveryRate: number;
   totalSales: number;
 };
 
@@ -242,6 +243,8 @@ export function SalesChannelsAnalyticsPage() {
       confirmed: r.confirmed,
       cancelled: r.cancelled,
       confirmationRate: Math.round(r.confirmationRate * 10) / 10,
+      deliveryRate:
+        r.confirmed > 0 ? Math.round(r.deliveryRate * 10) / 10 : 0,
       totalSales: Math.round(r.totalSales * 100) / 100,
     }));
   }, [tableRows]);
@@ -481,6 +484,51 @@ export function SalesChannelsAnalyticsPage() {
                         dataKey="confirmationRate"
                         name="Confirmation rate"
                         fill="#a78bfa"
+                        radius={[4, 4, 0, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-800/80 bg-slate-900/50 p-4 ring-1 ring-white/5">
+              <h3 className="mb-1 text-base font-semibold text-slate-50">Delivery rate</h3>
+              <p className="mb-4 text-xs text-slate-400">
+                Delivered orders as % of confirmed orders per channel (0% when there are no
+                confirmed orders)
+              </p>
+              <div className="h-[300px] w-full min-h-[260px]">
+                {chartData.length === 0 ? (
+                  <div className="flex h-full items-center justify-center text-sm text-slate-500">
+                    No data
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 48 }}>
+                      <CartesianGrid {...chartGrid} />
+                      <XAxis
+                        dataKey="channel"
+                        tick={chartAxisTick}
+                        axisLine={chartAxisLine}
+                        tickLine={chartAxisLine}
+                        interval={0}
+                        angle={-28}
+                        textAnchor="end"
+                        height={56}
+                      />
+                      <YAxis
+                        tick={chartAxisTick}
+                        axisLine={chartAxisLine}
+                        tickLine={chartAxisLine}
+                        domain={[0, 100]}
+                        tickFormatter={(v) => `${v}%`}
+                      />
+                      <Tooltip content={<BarTooltip valueSuffix="%" />} />
+                      <Bar
+                        dataKey="deliveryRate"
+                        name="Delivery rate"
+                        fill="#2dd4bf"
                         radius={[4, 4, 0, 0]}
                       />
                     </BarChart>
