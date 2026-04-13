@@ -64,21 +64,28 @@ function DonutChart({ title, segments }: { title: string; segments: Segment[] })
 }
 
 function StatCard({
+  icon,
   label,
   value,
-  percent,
+  percentOfTotal,
+  className,
 }: {
+  icon: string;
   label: string;
   value: number;
-  percent?: number;
+  percentOfTotal: number;
+  className: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-800/80 bg-slate-900/50 p-4 ring-1 ring-white/5">
-      <p className="text-xs uppercase tracking-wider text-slate-500">{label}</p>
+    <div className={`rounded-2xl border p-4 ring-1 ${className}`}>
+      <p className="text-xs uppercase tracking-wider text-slate-200/80">
+        <span className="mr-1">{icon}</span>
+        {label}
+      </p>
       <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
-      {typeof percent === "number" ? (
-        <p className="mt-1 text-sm text-slate-400">{percent.toFixed(1)}%</p>
-      ) : null}
+      <p className="mt-1 text-sm text-slate-200/80">
+        {percentOfTotal.toFixed(1)}% of total
+      </p>
     </div>
   );
 }
@@ -182,8 +189,6 @@ export function OrdersAnalyticsPage() {
 
   const stats = useMemo(() => {
     const total = rows.length;
-    const duplicated = rows.filter((o) => o.sub_status === "duplicated").length;
-    const totalValid = total - duplicated;
     const pending = rows.filter((o) => o.status === "under_process").length;
     const postponed = rows.filter((o) => o.sub_status === "postponed").length;
     const cancelled = rows.filter((o) => o.status === "cancelled").length;
@@ -197,7 +202,6 @@ export function OrdersAnalyticsPage() {
     ).length;
     return {
       total,
-      totalValid,
       pending,
       postponed,
       cancelled,
@@ -205,7 +209,6 @@ export function OrdersAnalyticsPage() {
       inDelivery,
       delivered,
       returned,
-      totalValidPct: pct(totalValid, total),
     };
   }, [rows]);
 
@@ -349,20 +352,61 @@ export function OrdersAnalyticsPage() {
         <>
           <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
-              label="Total Orders (Valid)"
-              value={stats.totalValid}
-              percent={stats.totalValidPct}
+              icon="📦"
+              label="Total Orders"
+              value={stats.total}
+              percentOfTotal={pct(stats.total, stats.total)}
+              className="border-slate-700/80 bg-slate-900/60 ring-white/5"
             />
-            <StatCard label="Pending Orders (Under Process)" value={stats.pending} />
-            <StatCard label="Postponed Orders" value={stats.postponed} />
-            <StatCard label="Cancelled Orders" value={stats.cancelled} />
-          </section>
-
-          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard label="Confirmed Orders" value={stats.confirmed} />
-            <StatCard label="In Delivery (Cancelled)" value={stats.inDelivery} />
-            <StatCard label="Delivered Orders" value={stats.delivered} />
-            <StatCard label="Returned Orders" value={stats.returned} />
+            <StatCard
+              icon="🔄"
+              label="Under Process"
+              value={stats.pending}
+              percentOfTotal={pct(stats.pending, stats.total)}
+              className="border-sky-500/30 bg-sky-950/30 ring-sky-400/10"
+            />
+            <StatCard
+              icon="⏳"
+              label="Postponed"
+              value={stats.postponed}
+              percentOfTotal={pct(stats.postponed, stats.total)}
+              className="border-amber-500/30 bg-amber-950/30 ring-amber-400/10"
+            />
+            <StatCard
+              icon="❌"
+              label="Cancelled"
+              value={stats.cancelled}
+              percentOfTotal={pct(stats.cancelled, stats.total)}
+              className="border-rose-500/30 bg-rose-950/30 ring-rose-400/10"
+            />
+            <StatCard
+              icon="✅"
+              label="Confirmed"
+              value={stats.confirmed}
+              percentOfTotal={pct(stats.confirmed, stats.total)}
+              className="border-emerald-500/30 bg-emerald-950/30 ring-emerald-400/10"
+            />
+            <StatCard
+              icon="🚚"
+              label="In Delivery"
+              value={stats.inDelivery}
+              percentOfTotal={pct(stats.inDelivery, stats.total)}
+              className="border-blue-500/30 bg-blue-950/30 ring-blue-400/10"
+            />
+            <StatCard
+              icon="📬"
+              label="Delivered"
+              value={stats.delivered}
+              percentOfTotal={pct(stats.delivered, stats.total)}
+              className="border-green-500/30 bg-green-950/30 ring-green-400/10"
+            />
+            <StatCard
+              icon="🔁"
+              label="Returned"
+              value={stats.returned}
+              percentOfTotal={pct(stats.returned, stats.total)}
+              className="border-red-700/30 bg-red-950/40 ring-red-600/10"
+            />
           </section>
 
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
