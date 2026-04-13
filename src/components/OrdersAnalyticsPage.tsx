@@ -33,7 +33,7 @@ function pct(numerator: number, denominator: number): number {
 function DonutChart({ title, segments }: { title: string; segments: Segment[] }) {
   const total = segments.reduce((sum, s) => sum + s.value, 0);
   const gradient = useMemo(() => {
-    if (total <= 0) return "conic-gradient(#1e293b 0 100%)";
+    if (total <= 0) return "conic-gradient(#334155 0 100%)";
     let start = 0;
     const parts: string[] = [];
     for (const s of segments) {
@@ -47,29 +47,41 @@ function DonutChart({ title, segments }: { title: string; segments: Segment[] })
 
   return (
     <div className="rounded-2xl border border-slate-800/80 bg-slate-900/50 p-4 ring-1 ring-white/5">
-      <p className="text-sm font-semibold text-slate-100">{title}</p>
-      <div className="mt-3 flex items-center gap-4">
+      <h3 className="border-b border-slate-800/90 pb-2 text-base font-semibold tracking-tight text-slate-50">
+        {title}
+      </h3>
+      <div className="mt-4 flex flex-col items-center gap-4">
         <div
-          className="relative h-28 w-28 rounded-full"
+          className="relative h-36 w-36 shrink-0 rounded-full shadow-inner ring-1 ring-white/10"
           style={{ background: gradient }}
           aria-hidden
         >
-          <div className="absolute inset-4 rounded-full bg-slate-900/95" />
+          <div className="absolute inset-[22%] rounded-full bg-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ring-slate-800/80" />
         </div>
-        <div className="space-y-1 text-xs text-slate-300">
-          {segments.map((s) => (
-            <div key={`${title}-${s.label}`} className="flex items-center gap-2">
-              <span
-                className="h-2.5 w-2.5 rounded-full"
-                style={{ backgroundColor: s.color }}
-              />
-              <span className="min-w-[7rem]">{s.label}</span>
-              <span className="tabular-nums text-slate-400">
-                {s.value} ({pct(s.value, total).toFixed(1)}%)
-              </span>
-            </div>
-          ))}
-        </div>
+        <ul className="w-full space-y-2 border-t border-slate-800/80 pt-3">
+          {segments.map((s) => {
+            const p = pct(s.value, total);
+            return (
+              <li
+                key={`${title}-${s.label}`}
+                className="flex items-baseline justify-between gap-3 text-sm text-slate-200"
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-white/15"
+                    style={{ backgroundColor: s.color }}
+                  />
+                  <span className="truncate font-medium">{s.label}</span>
+                </span>
+                <span className="shrink-0 tabular-nums text-slate-400">
+                  <span className="text-slate-200">{s.value}</span>
+                  <span className="mx-1.5 text-slate-600">·</span>
+                  <span>{p.toFixed(1)}%</span>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
       </div>
     </div>
   );
@@ -81,17 +93,19 @@ function StatCard({
   value,
   percentOfTotal,
   className,
+  iconClassName,
 }: {
   Icon: LucideIcon;
   label: string;
   value: number;
   percentOfTotal: number;
   className: string;
+  iconClassName: string;
 }) {
   return (
     <div className={`rounded-2xl border p-4 ring-1 ${className}`}>
       <div className="flex items-center gap-2">
-        <Icon className="h-7 w-7" />
+        <Icon className={`h-7 w-7 shrink-0 ${iconClassName}`} strokeWidth={2} />
         <p className="text-xs uppercase tracking-wider text-slate-200/80">{label}</p>
       </div>
       <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
@@ -380,6 +394,7 @@ export function OrdersAnalyticsPage() {
               value={stats.total}
               percentOfTotal={pct(stats.total, stats.total)}
               className="border-slate-700/80 bg-slate-900/60 ring-white/5"
+              iconClassName="text-white"
             />
             <StatCard
               Icon={RefreshCw}
@@ -387,6 +402,7 @@ export function OrdersAnalyticsPage() {
               value={stats.pending}
               percentOfTotal={pct(stats.pending, stats.total)}
               className="border-sky-500/30 bg-sky-950/30 ring-sky-400/10"
+              iconClassName="text-sky-300"
             />
             <StatCard
               Icon={Clock}
@@ -394,6 +410,7 @@ export function OrdersAnalyticsPage() {
               value={stats.postponed}
               percentOfTotal={pct(stats.postponed, stats.total)}
               className="border-amber-500/30 bg-amber-950/30 ring-amber-400/10"
+              iconClassName="text-yellow-300"
             />
             <StatCard
               Icon={XCircle}
@@ -401,6 +418,7 @@ export function OrdersAnalyticsPage() {
               value={stats.cancelled}
               percentOfTotal={pct(stats.cancelled, stats.total)}
               className="border-rose-500/30 bg-rose-950/30 ring-rose-400/10"
+              iconClassName="text-rose-300"
             />
             <StatCard
               Icon={CheckCircle}
@@ -408,6 +426,7 @@ export function OrdersAnalyticsPage() {
               value={stats.confirmed}
               percentOfTotal={pct(stats.confirmed, stats.total)}
               className="border-emerald-500/30 bg-emerald-950/30 ring-emerald-400/10"
+              iconClassName="text-emerald-300"
             />
             <StatCard
               Icon={Truck}
@@ -415,6 +434,7 @@ export function OrdersAnalyticsPage() {
               value={stats.inDelivery}
               percentOfTotal={pct(stats.inDelivery, stats.total)}
               className="border-blue-500/30 bg-blue-950/30 ring-blue-400/10"
+              iconClassName="text-blue-400"
             />
             <StatCard
               Icon={PackageCheck}
@@ -422,6 +442,7 @@ export function OrdersAnalyticsPage() {
               value={stats.delivered}
               percentOfTotal={pct(stats.delivered, stats.total)}
               className="border-green-500/30 bg-green-950/30 ring-green-400/10"
+              iconClassName="text-green-400"
             />
             <StatCard
               Icon={PackageX}
@@ -429,6 +450,7 @@ export function OrdersAnalyticsPage() {
               value={stats.returned}
               percentOfTotal={pct(stats.returned, stats.total)}
               className="border-red-700/30 bg-red-950/40 ring-red-600/10"
+              iconClassName="text-red-800"
             />
           </section>
 
