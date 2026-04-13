@@ -191,28 +191,6 @@ export function WalletCategoriesPage() {
                 />
               </label>
               <label className="space-y-1">
-                <span className="text-sm text-slate-300">Type</span>
-                <select
-                  value={draft.type}
-                  onChange={(e) =>
-                    setDraft((prev) => {
-                      const nextType = e.target.value as WalletTransactionType;
-                      return {
-                        ...prev,
-                        type: nextType,
-                        color:
-                          prev.color ||
-                          (nextType === "income" ? "#22c55e" : "#f43f5e"),
-                      };
-                    })
-                  }
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
-                >
-                  <option value="income">Income</option>
-                  <option value="expense">Expense</option>
-                </select>
-              </label>
-              <label className="space-y-1">
                 <span className="text-sm text-slate-300">Color</span>
                 <input
                   type="color"
@@ -272,12 +250,12 @@ function CategoryRows({
           key={cat.id}
           className="flex items-center justify-between rounded-xl border border-slate-800/80 bg-slate-950/50 px-3 py-2"
         >
-          <span className="inline-flex items-center gap-2 text-sm text-slate-100">
+          <span className="inline-flex min-w-0 items-center gap-2 text-sm font-medium text-slate-100">
             <span
               className="h-2.5 w-2.5 rounded-full ring-1 ring-white/20"
               style={{ backgroundColor: cat.color ?? "#94a3b8" }}
             />
-            {cat.name}
+            <span className="truncate">{cat.name?.trim() || "(Unnamed category)"}</span>
           </span>
           <div className="flex gap-2">
             <button
