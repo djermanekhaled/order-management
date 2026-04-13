@@ -1,4 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
+import type { LucideIcon } from "lucide-react";
+import {
+  CheckCircle,
+  Clock,
+  Package,
+  PackageCheck,
+  PackageX,
+  RefreshCw,
+  Truck,
+  XCircle,
+} from "lucide-react";
 import { WILAYAS_58_LABELS } from "../constants/algeriaWilayas58";
 import { supabase } from "../lib/supabase";
 
@@ -64,13 +75,13 @@ function DonutChart({ title, segments }: { title: string; segments: Segment[] })
 }
 
 function StatCard({
-  icon,
+  Icon,
   label,
   value,
   percentOfTotal,
   className,
 }: {
-  icon: string;
+  Icon: LucideIcon;
   label: string;
   value: number;
   percentOfTotal: number;
@@ -79,7 +90,7 @@ function StatCard({
   return (
     <div className={`rounded-2xl border p-4 ring-1 ${className}`}>
       <p className="text-xs uppercase tracking-wider text-slate-200/80">
-        <span className="mr-1">{icon}</span>
+        <Icon className="mr-1 inline-block h-3.5 w-3.5 align-text-bottom" />
         {label}
       </p>
       <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
@@ -352,56 +363,56 @@ export function OrdersAnalyticsPage() {
         <>
           <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
-              icon="📦"
+              Icon={Package}
               label="Total Orders"
               value={stats.total}
               percentOfTotal={pct(stats.total, stats.total)}
               className="border-slate-700/80 bg-slate-900/60 ring-white/5"
             />
             <StatCard
-              icon="🔄"
+              Icon={RefreshCw}
               label="Under Process"
               value={stats.pending}
               percentOfTotal={pct(stats.pending, stats.total)}
               className="border-sky-500/30 bg-sky-950/30 ring-sky-400/10"
             />
             <StatCard
-              icon="⏳"
+              Icon={Clock}
               label="Postponed"
               value={stats.postponed}
               percentOfTotal={pct(stats.postponed, stats.total)}
               className="border-amber-500/30 bg-amber-950/30 ring-amber-400/10"
             />
             <StatCard
-              icon="❌"
+              Icon={XCircle}
               label="Cancelled"
               value={stats.cancelled}
               percentOfTotal={pct(stats.cancelled, stats.total)}
               className="border-rose-500/30 bg-rose-950/30 ring-rose-400/10"
             />
             <StatCard
-              icon="✅"
+              Icon={CheckCircle}
               label="Confirmed"
               value={stats.confirmed}
               percentOfTotal={pct(stats.confirmed, stats.total)}
               className="border-emerald-500/30 bg-emerald-950/30 ring-emerald-400/10"
             />
             <StatCard
-              icon="🚚"
+              Icon={Truck}
               label="In Delivery"
               value={stats.inDelivery}
               percentOfTotal={pct(stats.inDelivery, stats.total)}
               className="border-blue-500/30 bg-blue-950/30 ring-blue-400/10"
             />
             <StatCard
-              icon="📬"
+              Icon={PackageCheck}
               label="Delivered"
               value={stats.delivered}
               percentOfTotal={pct(stats.delivered, stats.total)}
               className="border-green-500/30 bg-green-950/30 ring-green-400/10"
             />
             <StatCard
-              icon="🔁"
+              Icon={PackageX}
               label="Returned"
               value={stats.returned}
               percentOfTotal={pct(stats.returned, stats.total)}

@@ -695,7 +695,7 @@ export function AppSidebar({
                       : "text-slate-300 hover:bg-slate-800/80"
                   }`}
                 >
-                  <span className="truncate">Orders Analytics</span>
+                  <span className="truncate">Orders</span>
                 </button>
                 <button
                   type="button"
@@ -706,7 +706,7 @@ export function AppSidebar({
                       : "text-slate-300 hover:bg-slate-800/80"
                   }`}
                 >
-                  <span className="truncate">Sales Channels Analytics</span>
+                  <span className="truncate">Sales Channels</span>
                 </button>
                 <button
                   type="button"
@@ -717,7 +717,7 @@ export function AppSidebar({
                       : "text-slate-300 hover:bg-slate-800/80"
                   }`}
                 >
-                  <span className="truncate">Products Analytics</span>
+                  <span className="truncate">Products</span>
                 </button>
                 <button
                   type="button"
@@ -728,7 +728,7 @@ export function AppSidebar({
                       : "text-slate-300 hover:bg-slate-800/80"
                   }`}
                 >
-                  <span className="truncate">Delivery Companies Analytics</span>
+                  <span className="truncate">Delivery Companies</span>
                 </button>
               </div>
             )}
