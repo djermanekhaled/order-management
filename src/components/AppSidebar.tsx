@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { BarChart2 } from "lucide-react";
 import { countByNavKey } from "../lib/sidebarNav";
 import { statusLabel } from "../lib/orderWorkflow";
 import type { Order, SidebarNavKey } from "../types/order";
@@ -340,19 +341,7 @@ export function AppSidebar({
             onClick={() => onViewChange("analytics_orders")}
             tintClass="bg-fuchsia-600/30 text-fuchsia-200"
           >
-            <svg
-              className="h-4 w-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M11 19V6m0 13l-4-4m4 4l4-4M5 5h14"
-              />
-            </svg>
+            <BarChart2 className="h-4 w-4" />
           </CollapsedSectionIcon>
           <CollapsedSectionIcon
             title="Wallet"
@@ -680,7 +669,12 @@ export function AppSidebar({
               onClick={() => setAnalyticsOpen((o) => !o)}
               className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-sm font-medium text-slate-200 hover:bg-slate-800/60"
             >
-              <span className="truncate">Analytics</span>
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-fuchsia-600/30 text-fuchsia-200">
+                  <BarChart2 className="h-4 w-4" />
+                </span>
+                <span className="truncate">Analytics</span>
+              </span>
               <Chevron open={analyticsOpen} />
             </button>
 

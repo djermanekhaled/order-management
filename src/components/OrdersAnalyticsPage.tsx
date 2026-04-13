@@ -3,6 +3,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   CheckCircle,
   Clock,
+  Filter,
   Package,
   PackageCheck,
   PackageX,
@@ -89,10 +90,10 @@ function StatCard({
 }) {
   return (
     <div className={`rounded-2xl border p-4 ring-1 ${className}`}>
-      <p className="text-xs uppercase tracking-wider text-slate-200/80">
-        <Icon className="mr-1 inline-block h-3.5 w-3.5 align-text-bottom" />
-        {label}
-      </p>
+      <div className="flex items-center gap-2">
+        <Icon className="h-7 w-7" />
+        <p className="text-xs uppercase tracking-wider text-slate-200/80">{label}</p>
+      </div>
       <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
       <p className="mt-1 text-sm text-slate-200/80">
         {percentOfTotal.toFixed(1)}% of total
@@ -112,6 +113,7 @@ export function OrdersAnalyticsPage() {
   const [salesChannelFilter, setSalesChannelFilter] = useState("");
   const [wilayaFilter, setWilayaFilter] = useState("");
   const [deliveryCompanyFilter, setDeliveryCompanyFilter] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [productOptions, setProductOptions] = useState<string[]>([]);
   const [salesChannelOptions, setSalesChannelOptions] = useState<string[]>([]);
@@ -287,68 +289,78 @@ export function OrdersAnalyticsPage() {
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-slate-800/80 bg-slate-900/50 p-4 ring-1 ring-white/5">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
-          />
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
-          />
-          <select
-            value={productFilter}
-            onChange={(e) => setProductFilter(e.target.value)}
-            className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
-          >
-            <option value="">All products</option>
-            {productOptions.map((x) => (
-              <option key={x} value={x}>
-                {x}
-              </option>
-            ))}
-          </select>
-          <select
-            value={salesChannelFilter}
-            onChange={(e) => setSalesChannelFilter(e.target.value)}
-            className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
-          >
-            <option value="">All sales channels</option>
-            {salesChannelOptions.map((x) => (
-              <option key={x} value={x}>
-                {x}
-              </option>
-            ))}
-          </select>
-          <select
-            value={wilayaFilter}
-            onChange={(e) => setWilayaFilter(e.target.value)}
-            className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
-          >
-            <option value="">All wilayas</option>
-            {WILAYAS_58_LABELS.map((x) => (
-              <option key={x} value={x}>
-                {x}
-              </option>
-            ))}
-          </select>
-          <select
-            value={deliveryCompanyFilter}
-            onChange={(e) => setDeliveryCompanyFilter(e.target.value)}
-            className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
-          >
-            <option value="">All delivery companies</option>
-            {deliveryCompanyOptions.map((x) => (
-              <option key={x} value={x}>
-                {x}
-              </option>
-            ))}
-          </select>
-        </div>
+        <button
+          type="button"
+          onClick={() => setFiltersOpen((open) => !open)}
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/50 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800"
+        >
+          <Filter className="h-4 w-4" />
+          Filters
+        </button>
+        {filtersOpen ? (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+            />
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+            />
+            <select
+              value={productFilter}
+              onChange={(e) => setProductFilter(e.target.value)}
+              className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+            >
+              <option value="">All products</option>
+              {productOptions.map((x) => (
+                <option key={x} value={x}>
+                  {x}
+                </option>
+              ))}
+            </select>
+            <select
+              value={salesChannelFilter}
+              onChange={(e) => setSalesChannelFilter(e.target.value)}
+              className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+            >
+              <option value="">All sales channels</option>
+              {salesChannelOptions.map((x) => (
+                <option key={x} value={x}>
+                  {x}
+                </option>
+              ))}
+            </select>
+            <select
+              value={wilayaFilter}
+              onChange={(e) => setWilayaFilter(e.target.value)}
+              className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+            >
+              <option value="">All wilayas</option>
+              {WILAYAS_58_LABELS.map((x) => (
+                <option key={x} value={x}>
+                  {x}
+                </option>
+              ))}
+            </select>
+            <select
+              value={deliveryCompanyFilter}
+              onChange={(e) => setDeliveryCompanyFilter(e.target.value)}
+              className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-slate-100"
+            >
+              <option value="">All delivery companies</option>
+              {deliveryCompanyOptions.map((x) => (
+                <option key={x} value={x}>
+                  {x}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
       </section>
 
       {error ? (
