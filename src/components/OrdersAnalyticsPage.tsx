@@ -50,22 +50,19 @@ type DonutTooltipPayloadEntry = {
 type DonutTooltipProps = {
   active?: boolean;
   payload?: DonutTooltipPayloadEntry[];
-  sliceSum: number;
 };
 
-function DonutTooltip({ active, payload, sliceSum }: DonutTooltipProps) {
+function DonutTooltip({ active, payload }: DonutTooltipProps) {
   if (!active || !payload?.length) return null;
   const row = payload[0];
   const name = String(row.name ?? row.payload?.name ?? "");
   const raw = row.value;
   const count =
     typeof raw === "number" && Number.isFinite(raw) ? raw : Number(raw) || 0;
-  const pct = sliceSum > 0 ? (count / sliceSum) * 100 : 0;
   return (
     <div className="rounded-lg border border-slate-600/80 bg-slate-900/95 px-3 py-2 text-sm shadow-xl ring-1 ring-white/10 backdrop-blur-sm">
       <p className="font-medium text-slate-50">{name}</p>
       <p className="mt-0.5 tabular-nums text-slate-300">Count: {count}</p>
-      <p className="mt-0.5 tabular-nums text-slate-400">{pct.toFixed(1)}%</p>
     </div>
   );
 }
@@ -82,11 +79,6 @@ function DonutChart({ title, segments }: { title: string; segments: Segment[] })
           fill: s.color,
         })),
     [segments]
-  );
-
-  const sliceSum = useMemo(
-    () => chartData.reduce((sum, d) => sum + d.value, 0),
-    [chartData]
   );
 
   const renderSliceLabel = useCallback((props: PieLabelRenderProps) => {
@@ -150,7 +142,7 @@ function DonutChart({ title, segments }: { title: string; segments: Segment[] })
                     <Cell key={d.name} fill={d.fill} />
                   ))}
                 </Pie>
-                <Tooltip content={<DonutTooltip sliceSum={sliceSum} />} />
+                <Tooltip content={<DonutTooltip />} />
               </PieChart>
             </ResponsiveContainer>
           )}
