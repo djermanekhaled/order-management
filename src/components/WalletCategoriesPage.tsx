@@ -23,6 +23,9 @@ export function WalletCategoriesPage() {
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<CategoryDraft>(EMPTY_DRAFT);
+  const [pendingDelete, setPendingDelete] = useState<WalletCategory | null>(
+    null
+  );
 
   const loadCategories = useCallback(async () => {
     setLoading(true);
@@ -101,7 +104,6 @@ export function WalletCategoriesPage() {
   }
 
   async function deleteCategory(cat: WalletCategory) {
-    if (!window.confirm(`Delete "${cat.name}" category?`)) return;
     setSaving(true);
     setError(null);
     const { error: delErr } = await supabase
@@ -114,6 +116,12 @@ export function WalletCategoriesPage() {
       return;
     }
     await loadCategories();
+  }
+
+  async function confirmDeleteCategory() {
+    if (!pendingDelete) return;
+    await deleteCategory(pendingDelete);
+    setPendingDelete(null);
   }
 
   const incomeCategories = categories.filter((c) => c.type === "income");
@@ -149,7 +157,7 @@ export function WalletCategoriesPage() {
           rows={incomeCategories}
           loading={loading}
           onEdit={openEdit}
-          onDelete={deleteCategory}
+          onDelete={setPendingDelete}
         />
       </section>
 
@@ -168,7 +176,7 @@ export function WalletCategoriesPage() {
           rows={expenseCategories}
           loading={loading}
           onEdit={openEdit}
-          onDelete={deleteCategory}
+          onDelete={setPendingDelete}
         />
       </section>
 
@@ -222,6 +230,35 @@ export function WalletCategoriesPage() {
           </div>
         </div>
       )}
+
+      {pendingDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-2xl">
+            <h3 className="text-lg font-semibold text-white">Confirm Delete</h3>
+            <p className="mt-3 text-sm text-slate-300">
+              Are you sure you want to delete this category?
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingDelete(null)}
+                className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700"
+                disabled={saving}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmDeleteCategory()}
+                className="rounded-xl border border-rose-600/40 bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-500"
+                disabled={saving}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -268,7 +305,7 @@ function CategoryRows({
             </button>
             <button
               type="button"
-              onClick={() => void onDelete(cat)}
+              onClick={() => onDelete(cat)}
               className="rounded-lg border border-rose-600/40 px-2 py-1 text-sm text-rose-200 hover:bg-rose-950/40"
               title="Delete category"
             >

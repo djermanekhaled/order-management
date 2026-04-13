@@ -19,6 +19,11 @@ interface TransactionDraft {
   category_id: string;
 }
 
+type PendingDelete =
+  | { kind: "wallet"; wallet: Wallet }
+  | { kind: "transaction"; tx: WalletTransaction }
+  | null;
+
 function formatMoneyDzd(n: number) {
   return new Intl.NumberFormat(undefined, {
     style: "currency",
@@ -99,6 +104,7 @@ export function WalletsPage() {
   const [transactionDraft, setTransactionDraft] = useState<TransactionDraft>(
     EMPTY_TRANSACTION_DRAFT
   );
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete>(null);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -284,13 +290,6 @@ export function WalletsPage() {
   }
 
   async function deleteWallet(wallet: Wallet) {
-    if (
-      !window.confirm(
-        `Delete wallet "${wallet.name}" and all its transactions? This cannot be undone.`
-      )
-    ) {
-      return;
-    }
     setSaving(true);
     setError(null);
     const { error: delErr } = await supabase.from("wallets").delete().eq("id", wallet.id);
@@ -386,7 +385,6 @@ export function WalletsPage() {
   }
 
   async function deleteTransaction(tx: WalletTransaction) {
-    if (!window.confirm("Delete this transaction?")) return;
     setSaving(true);
     setError(null);
     const { error: delErr } = await supabase
@@ -404,6 +402,16 @@ export function WalletsPage() {
       .eq("id", tx.wallet_id);
     setSaving(false);
     await loadAll();
+  }
+
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    if (pendingDelete.kind === "wallet") {
+      await deleteWallet(pendingDelete.wallet);
+    } else {
+      await deleteTransaction(pendingDelete.tx);
+    }
+    setPendingDelete(null);
   }
 
   if (selectedWallet) {
@@ -576,7 +584,7 @@ export function WalletsPage() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => void deleteTransaction(tx)}
+                          onClick={() => setPendingDelete({ kind: "transaction", tx })}
                           className="rounded-lg border border-rose-600/40 px-2 py-1 text-sm text-rose-200 hover:bg-rose-950/40"
                         >
                           🗑️
@@ -776,7 +784,7 @@ export function WalletsPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => void deleteWallet(wallet)}
+                            onClick={() => setPendingDelete({ kind: "wallet", wallet })}
                             className="rounded-lg border border-rose-600/40 px-2 py-1 text-sm text-rose-200 hover:bg-rose-950/40"
                             title="Delete wallet"
                           >
@@ -846,6 +854,37 @@ export function WalletsPage() {
           }}
           onSave={() => void saveTransaction()}
         />
+      )}
+
+      {pendingDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-2xl">
+            <h3 className="text-lg font-semibold text-white">Confirm Delete</h3>
+            <p className="mt-3 text-sm text-slate-300">
+              {pendingDelete.kind === "wallet"
+                ? "Are you sure you want to delete this wallet? All transactions will be deleted permanently."
+                : "Are you sure you want to delete this transaction?"}
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPendingDelete(null)}
+                className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700"
+                disabled={saving}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmDelete()}
+                className="rounded-xl border border-rose-600/40 bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-500"
+                disabled={saving}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
