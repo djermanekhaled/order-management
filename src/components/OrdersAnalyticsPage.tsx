@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   CheckCircle,
@@ -8,9 +8,18 @@ import {
   PackageCheck,
   PackageX,
   RefreshCw,
+  RotateCcw,
   Truck,
   XCircle,
 } from "lucide-react";
+import {
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  type TooltipProps,
+} from "recharts";
 import { WILAYAS_58_LABELS } from "../constants/algeriaWilayas58";
 import { supabase } from "../lib/supabase";
 
@@ -30,20 +39,69 @@ function pct(numerator: number, denominator: number): number {
   return (numerator / denominator) * 100;
 }
 
+type PieDatum = { name: string; value: number; fill: string };
+
+function DonutTooltip({
+  active,
+  payload,
+}: TooltipProps<number, string>) {
+  if (!active || !payload?.length) return null;
+  const row = payload[0];
+  const name = String(row.name ?? "");
+  const count = typeof row.value === "number" ? row.value : Number(row.value);
+  return (
+    <div className="rounded-lg border border-slate-600/80 bg-slate-900/95 px-3 py-2 text-sm shadow-xl ring-1 ring-white/10 backdrop-blur-sm">
+      <p className="font-medium text-slate-50">{name}</p>
+      <p className="mt-0.5 tabular-nums text-slate-300">Count: {count}</p>
+    </div>
+  );
+}
+
 function DonutChart({ title, segments }: { title: string; segments: Segment[] }) {
   const total = segments.reduce((sum, s) => sum + s.value, 0);
-  const gradient = useMemo(() => {
-    if (total <= 0) return "conic-gradient(#334155 0 100%)";
-    let start = 0;
-    const parts: string[] = [];
-    for (const s of segments) {
-      const ratio = s.value / total;
-      const end = start + ratio * 100;
-      parts.push(`${s.color} ${start.toFixed(2)}% ${end.toFixed(2)}%`);
-      start = end;
-    }
-    return `conic-gradient(${parts.join(", ")})`;
-  }, [segments, total]);
+  const chartData = useMemo<PieDatum[]>(
+    () =>
+      segments
+        .filter((s) => s.value > 0)
+        .map((s) => ({
+          name: s.label,
+          value: s.value,
+          fill: s.color,
+        })),
+    [segments]
+  );
+
+  const renderSliceLabel = useCallback(
+    (props: {
+      cx: number;
+      cy: number;
+      midAngle: number;
+      innerRadius: number;
+      outerRadius: number;
+      percent: number;
+    }) => {
+      const p = props.percent;
+      if (p <= 0 || !Number.isFinite(p)) return null;
+      const RAD = Math.PI / 180;
+      const r = props.innerRadius + (props.outerRadius - props.innerRadius) * 0.55;
+      const x = props.cx + r * Math.cos(-props.midAngle * RAD);
+      const y = props.cy + r * Math.sin(-props.midAngle * RAD);
+      return (
+        <text
+          x={x}
+          y={y}
+          fill="#f8fafc"
+          textAnchor="middle"
+          dominantBaseline="central"
+          className="text-[11px] font-semibold tabular-nums"
+          style={{ paintOrder: "stroke", stroke: "rgba(15,23,42,0.85)", strokeWidth: 3 }}
+        >
+          {(p * 100).toFixed(1)}%
+        </text>
+      );
+    },
+    []
+  );
 
   return (
     <div className="rounded-2xl border border-slate-800/80 bg-slate-900/50 p-4 ring-1 ring-white/5">
@@ -51,12 +109,37 @@ function DonutChart({ title, segments }: { title: string; segments: Segment[] })
         {title}
       </h3>
       <div className="mt-4 flex flex-col items-center gap-4">
-        <div
-          className="relative h-36 w-36 shrink-0 rounded-full shadow-inner ring-1 ring-white/10"
-          style={{ background: gradient }}
-          aria-hidden
-        >
-          <div className="absolute inset-[22%] rounded-full bg-slate-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ring-1 ring-slate-800/80" />
+        <div className="h-[220px] w-full min-h-[220px]">
+          {chartData.length === 0 ? (
+            <div className="flex h-full items-center justify-center text-sm text-slate-500">
+              No data for this chart
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
+                <Pie
+                  data={chartData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius="52%"
+                  outerRadius="78%"
+                  paddingAngle={1.5}
+                  stroke="rgb(15 23 42 / 0.9)"
+                  strokeWidth={2}
+                  label={renderSliceLabel}
+                  labelLine={false}
+                  isAnimationActive={false}
+                >
+                  {chartData.map((d) => (
+                    <Cell key={d.name} fill={d.fill} />
+                  ))}
+                </Pie>
+                <Tooltip content={<DonutTooltip />} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
         </div>
         <ul className="w-full space-y-2 border-t border-slate-800/80 pt-3">
           {segments.map((s) => {
@@ -134,6 +217,15 @@ export function OrdersAnalyticsPage() {
   const [deliveryCompanyOptions, setDeliveryCompanyOptions] = useState<string[]>(
     []
   );
+
+  const resetFilters = useCallback(() => {
+    setDateFrom("");
+    setDateTo("");
+    setProductFilter("");
+    setSalesChannelFilter("");
+    setWilayaFilter("");
+    setDeliveryCompanyFilter("");
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -303,14 +395,24 @@ export function OrdersAnalyticsPage() {
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-slate-800/80 bg-slate-900/50 p-4 ring-1 ring-white/5">
-        <button
-          type="button"
-          onClick={() => setFiltersOpen((open) => !open)}
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/50 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800"
-        >
-          <Filter className="h-4 w-4" />
-          Filters
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((open) => !open)}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/50 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800"
+          >
+            <Filter className="h-4 w-4" />
+            Filters
+          </button>
+          <button
+            type="button"
+            onClick={resetFilters}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-950/60 px-4 py-2 text-sm font-medium text-slate-300 hover:border-slate-600 hover:bg-slate-900"
+          >
+            <RotateCcw className="h-4 w-4" />
+            Reset
+          </button>
+        </div>
         {filtersOpen ? (
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <input
