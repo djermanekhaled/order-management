@@ -43,7 +43,8 @@ import { OrderHistoryPanel } from "./OrderHistoryPanel";
 import { InventoryPage } from "./InventoryPage";
 import { ProductsPage } from "./ProductsPage";
 import { SalesChannelsPage } from "./SalesChannelsPage";
-import { WalletPage } from "./WalletPage";
+import { WalletCategoriesPage } from "./WalletCategoriesPage";
+import { WalletsPage } from "./WalletsPage";
 
 function formatMoneyDzd(n: number) {
   return new Intl.NumberFormat(undefined, {
@@ -144,7 +145,8 @@ export function OrdersDashboard() {
     | "delivery_companies"
     | "inventory"
     | "tracking_orders"
-    | "wallet"
+    | "wallets"
+    | "wallet_categories"
   >("dashboard");
   const [channelModalOpen, setChannelModalOpen] = useState(false);
   const [productModalOpen, setProductModalOpen] = useState(false);
@@ -815,8 +817,10 @@ export function OrdersDashboard() {
                 ? "delivery_companies"
                 : sidebarView === "inventory"
                   ? "inventory"
-                  : sidebarView === "wallet"
-                    ? "wallet"
+                  : sidebarView === "wallets"
+                    ? "wallets"
+                    : sidebarView === "wallet_categories"
+                      ? "wallet_categories"
                   : sidebarView === "tracking_orders"
                     ? "tracking_orders"
                   : "orders"
@@ -828,7 +832,8 @@ export function OrdersDashboard() {
           else if (v === "delivery_companies")
             setSidebarView("delivery_companies");
           else if (v === "inventory") setSidebarView("inventory");
-          else if (v === "wallet") setSidebarView("wallet");
+          else if (v === "wallets") setSidebarView("wallets");
+          else if (v === "wallet_categories") setSidebarView("wallet_categories");
           else if (v === "tracking_orders") {
             setSidebarView("tracking_orders");
             setNavKey("follow");
@@ -922,8 +927,10 @@ export function OrdersDashboard() {
           />
         ) : sidebarView === "inventory" ? (
           <InventoryPage />
-        ) : sidebarView === "wallet" ? (
-          <WalletPage />
+        ) : sidebarView === "wallets" ? (
+          <WalletsPage />
+        ) : sidebarView === "wallet_categories" ? (
+          <WalletCategoriesPage />
         ) : (
           <>
         {error && (
