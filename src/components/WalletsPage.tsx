@@ -75,7 +75,6 @@ export function WalletsPage() {
 
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"" | WalletTransactionType>("");
   const [categoryFilterId, setCategoryFilterId] = useState("");
 
   const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
@@ -115,7 +114,7 @@ export function WalletsPage() {
         .order("created_at", { ascending: false }),
       supabase
         .from("wallet_categories")
-        .select("id, name, type, created_at")
+        .select("id, name, type, color, created_at")
         .order("name", { ascending: true }),
     ]);
     setLoading(false);
@@ -144,11 +143,10 @@ export function WalletsPage() {
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter((tx) => {
-      if (typeFilter && tx.type !== typeFilter) return false;
       if (categoryFilterId && tx.category_id !== categoryFilterId) return false;
       return inDateRange(tx.created_at, dateFrom, dateTo);
     });
-  }, [transactions, typeFilter, categoryFilterId, dateFrom, dateTo]);
+  }, [transactions, categoryFilterId, dateFrom, dateTo]);
 
   const walletAggregates = useMemo(() => {
     const m = new Map<string, { income: number; expense: number; lastTx: string | null }>();
@@ -499,8 +497,12 @@ export function WalletsPage() {
               >
                 <option value="">All categories</option>
                 {categories.map((cat) => (
-                  <option key={cat.id} value={cat.id}>
-                    {cat.name} ({cat.type})
+                  <option
+                    key={cat.id}
+                    value={cat.id}
+                    style={{ color: cat.color ?? undefined }}
+                  >
+                    ● {cat.name} ({cat.type})
                   </option>
                 ))}
               </select>
@@ -530,7 +532,23 @@ export function WalletsPage() {
                   <tr key={tx.id} className="hover:bg-slate-800/20">
                     <td className="px-5 py-3 text-slate-100">{tx.note?.trim() || "-"}</td>
                     <td className="px-5 py-3 text-slate-300">
-                      {tx.category_id ? categoryById.get(tx.category_id)?.name ?? "-" : "-"}
+                      {tx.category_id ? (
+                        (() => {
+                          const cat = categoryById.get(tx.category_id);
+                          if (!cat) return "-";
+                          return (
+                            <span className="inline-flex items-center gap-2">
+                              <span
+                                className="h-2.5 w-2.5 rounded-full ring-1 ring-white/20"
+                                style={{ backgroundColor: cat.color ?? "#94a3b8" }}
+                              />
+                              {cat.name}
+                            </span>
+                          );
+                        })()
+                      ) : (
+                        "-"
+                      )}
                     </td>
                     <td className="px-5 py-3 tabular-nums text-slate-200">
                       {formatMoneyDzd(Number(tx.amount) || 0)}
@@ -636,7 +654,7 @@ export function WalletsPage() {
       </section>
 
       <section className="rounded-2xl border border-slate-800/80 bg-slate-900/50 p-4 shadow-xl ring-1 ring-white/5">
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-3">
           <label className="space-y-1">
             <span className="text-xs uppercase tracking-wide text-slate-500">Date from</span>
             <input
@@ -656,20 +674,6 @@ export function WalletsPage() {
             />
           </label>
           <label className="space-y-1">
-            <span className="text-xs uppercase tracking-wide text-slate-500">Type</span>
-            <select
-              value={typeFilter}
-              onChange={(e) =>
-                setTypeFilter(e.target.value as "" | WalletTransactionType)
-              }
-              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
-            >
-              <option value="">All</option>
-              <option value="income">Income</option>
-              <option value="expense">Expense</option>
-            </select>
-          </label>
-          <label className="space-y-1">
             <span className="text-xs uppercase tracking-wide text-slate-500">Category</span>
             <select
               value={categoryFilterId}
@@ -678,8 +682,12 @@ export function WalletsPage() {
             >
               <option value="">All categories</option>
               {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.name} ({cat.type})
+                <option
+                  key={cat.id}
+                  value={cat.id}
+                  style={{ color: cat.color ?? undefined }}
+                >
+                  ● {cat.name} ({cat.type})
                 </option>
               ))}
             </select>
@@ -742,6 +750,14 @@ export function WalletsPage() {
                       </td>
                       <td className="px-5 py-3">
                         <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedWalletId(wallet.id)}
+                            className="rounded-lg border border-indigo-600/40 px-2 py-1 text-sm text-indigo-200 hover:bg-indigo-950/40"
+                            title="Open wallet"
+                          >
+                            👁️
+                          </button>
                           <button
                             type="button"
                             onClick={() => openCreateTransaction(wallet.id, "income")}
@@ -887,23 +903,9 @@ function TransactionModal({
               className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
             />
           </label>
-          <label className="space-y-1">
-            <span className="text-sm text-slate-300">Type</span>
-            <select
-              value={draft.type}
-              onChange={(e) =>
-                onDraftChange({
-                  ...draft,
-                  type: e.target.value as WalletTransactionType,
-                  category_id: "",
-                })
-              }
-              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
-            >
-              <option value="income">Income</option>
-              <option value="expense">Expense</option>
-            </select>
-          </label>
+          <p className="text-xs uppercase tracking-wide text-slate-500">
+            Type: {draft.type === "income" ? "Income" : "Expense"}
+          </p>
           <label className="space-y-1">
             <span className="text-sm text-slate-300">Category</span>
             <select
@@ -913,8 +915,12 @@ function TransactionModal({
             >
               <option value="">Select category</option>
               {categories.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.name}
+                <option
+                  key={cat.id}
+                  value={cat.id}
+                  style={{ color: cat.color ?? undefined }}
+                >
+                  ● {cat.name}
                 </option>
               ))}
             </select>

@@ -5,11 +5,13 @@ import type { WalletCategory, WalletTransactionType } from "../types/wallet";
 interface CategoryDraft {
   name: string;
   type: WalletTransactionType;
+  color: string;
 }
 
 const EMPTY_DRAFT: CategoryDraft = {
   name: "",
   type: "income",
+  color: "#22c55e",
 };
 
 export function WalletCategoriesPage() {
@@ -27,7 +29,7 @@ export function WalletCategoriesPage() {
     setError(null);
     const { data, error: qErr } = await supabase
       .from("wallet_categories")
-      .select("id, name, type, created_at")
+      .select("id, name, type, color, created_at")
       .order("name", { ascending: true });
     setLoading(false);
     if (qErr) {
@@ -44,14 +46,22 @@ export function WalletCategoriesPage() {
   function openCreate(type: WalletTransactionType) {
     setModalMode("create");
     setEditingId(null);
-    setDraft({ name: "", type });
+    setDraft({
+      name: "",
+      type,
+      color: type === "income" ? "#22c55e" : "#f43f5e",
+    });
     setModalOpen(true);
   }
 
   function openEdit(cat: WalletCategory) {
     setModalMode("edit");
     setEditingId(cat.id);
-    setDraft({ name: cat.name, type: cat.type });
+    setDraft({
+      name: cat.name,
+      type: cat.type,
+      color: cat.color ?? (cat.type === "income" ? "#22c55e" : "#f43f5e"),
+    });
     setModalOpen(true);
   }
 
@@ -66,7 +76,7 @@ export function WalletCategoriesPage() {
     if (modalMode === "create") {
       const { error: insErr } = await supabase
         .from("wallet_categories")
-        .insert({ name, type: draft.type });
+        .insert({ name, type: draft.type, color: draft.color });
       if (insErr) {
         setSaving(false);
         setError(insErr.message);
@@ -75,7 +85,7 @@ export function WalletCategoriesPage() {
     } else if (editingId) {
       const { error: upErr } = await supabase
         .from("wallet_categories")
-        .update({ name, type: draft.type })
+        .update({ name, type: draft.type, color: draft.color })
         .eq("id", editingId);
       if (upErr) {
         setSaving(false);
@@ -185,16 +195,33 @@ export function WalletCategoriesPage() {
                 <select
                   value={draft.type}
                   onChange={(e) =>
-                    setDraft((prev) => ({
-                      ...prev,
-                      type: e.target.value as WalletTransactionType,
-                    }))
+                    setDraft((prev) => {
+                      const nextType = e.target.value as WalletTransactionType;
+                      return {
+                        ...prev,
+                        type: nextType,
+                        color:
+                          prev.color ||
+                          (nextType === "income" ? "#22c55e" : "#f43f5e"),
+                      };
+                    })
                   }
                   className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
                 >
                   <option value="income">Income</option>
                   <option value="expense">Expense</option>
                 </select>
+              </label>
+              <label className="space-y-1">
+                <span className="text-sm text-slate-300">Color</span>
+                <input
+                  type="color"
+                  value={draft.color}
+                  onChange={(e) =>
+                    setDraft((prev) => ({ ...prev, color: e.target.value }))
+                  }
+                  className="h-10 w-full rounded-xl border border-slate-700 bg-slate-950 px-2 py-1"
+                />
               </label>
             </div>
             <div className="mt-5 flex justify-end gap-2">
@@ -245,7 +272,13 @@ function CategoryRows({
           key={cat.id}
           className="flex items-center justify-between rounded-xl border border-slate-800/80 bg-slate-950/50 px-3 py-2"
         >
-          <span className="text-sm text-slate-100">{cat.name}</span>
+          <span className="inline-flex items-center gap-2 text-sm text-slate-100">
+            <span
+              className="h-2.5 w-2.5 rounded-full ring-1 ring-white/20"
+              style={{ backgroundColor: cat.color ?? "#94a3b8" }}
+            />
+            {cat.name}
+          </span>
           <div className="flex gap-2">
             <button
               type="button"

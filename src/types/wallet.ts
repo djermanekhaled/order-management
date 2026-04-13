@@ -11,6 +11,7 @@ export interface WalletCategory {
   id: string;
   name: string;
   type: WalletTransactionType;
+  color: string | null;
   created_at: string;
 }
 
