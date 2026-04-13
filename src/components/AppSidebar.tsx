@@ -37,7 +37,11 @@ export type AppView =
   | "delivery_companies"
   | "inventory"
   | "wallets"
-  | "wallet_categories";
+  | "wallet_categories"
+  | "analytics_orders"
+  | "analytics_sales_channels"
+  | "analytics_products"
+  | "analytics_delivery_companies";
 
 interface AppSidebarProps {
   orders: Order[];
@@ -133,6 +137,7 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const [ordersOpen, setOrdersOpen] = useState(true);
   const [walletOpen, setWalletOpen] = useState(true);
+  const [analyticsOpen, setAnalyticsOpen] = useState(true);
 
   const counts = useMemo(() => {
     const keys: SidebarNavKey[] = [
@@ -321,6 +326,31 @@ export function AppSidebar({
                 strokeLinejoin="round"
                 strokeWidth={2}
                 d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
+              />
+            </svg>
+          </CollapsedSectionIcon>
+          <CollapsedSectionIcon
+            title="Analytics"
+            active={
+              activeView === "analytics_orders" ||
+              activeView === "analytics_sales_channels" ||
+              activeView === "analytics_products" ||
+              activeView === "analytics_delivery_companies"
+            }
+            onClick={() => onViewChange("analytics_orders")}
+            tintClass="bg-fuchsia-600/30 text-fuchsia-200"
+          >
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M11 19V6m0 13l-4-4m4 4l4-4M5 5h14"
               />
             </svg>
           </CollapsedSectionIcon>
