@@ -76,6 +76,7 @@ export function WalletsPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [typeFilter, setTypeFilter] = useState<"" | WalletTransactionType>("");
+  const [categoryFilterId, setCategoryFilterId] = useState("");
 
   const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
   const [singleDateFrom, setSingleDateFrom] = useState("");
@@ -144,9 +145,10 @@ export function WalletsPage() {
   const filteredTransactions = useMemo(() => {
     return transactions.filter((tx) => {
       if (typeFilter && tx.type !== typeFilter) return false;
+      if (categoryFilterId && tx.category_id !== categoryFilterId) return false;
       return inDateRange(tx.created_at, dateFrom, dateTo);
     });
-  }, [transactions, typeFilter, dateFrom, dateTo]);
+  }, [transactions, typeFilter, categoryFilterId, dateFrom, dateTo]);
 
   const walletAggregates = useMemo(() => {
     const m = new Map<string, { income: number; expense: number; lastTx: string | null }>();
@@ -634,7 +636,7 @@ export function WalletsPage() {
       </section>
 
       <section className="rounded-2xl border border-slate-800/80 bg-slate-900/50 p-4 shadow-xl ring-1 ring-white/5">
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-4">
           <label className="space-y-1">
             <span className="text-xs uppercase tracking-wide text-slate-500">Date from</span>
             <input
@@ -665,6 +667,21 @@ export function WalletsPage() {
               <option value="">All</option>
               <option value="income">Income</option>
               <option value="expense">Expense</option>
+            </select>
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs uppercase tracking-wide text-slate-500">Category</span>
+            <select
+              value={categoryFilterId}
+              onChange={(e) => setCategoryFilterId(e.target.value)}
+              className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+            >
+              <option value="">All categories</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name} ({cat.type})
+                </option>
+              ))}
             </select>
           </label>
         </div>

@@ -132,6 +132,7 @@ export function AppSidebar({
   inventoryCount,
 }: AppSidebarProps) {
   const [ordersOpen, setOrdersOpen] = useState(true);
+  const [walletOpen, setWalletOpen] = useState(true);
 
   const counts = useMemo(() => {
     const keys: SidebarNavKey[] = [
@@ -324,8 +325,10 @@ export function AppSidebar({
             </svg>
           </CollapsedSectionIcon>
           <CollapsedSectionIcon
-            title="Wallets"
-            active={activeView === "wallets"}
+            title="Wallet"
+            active={
+              activeView === "wallets" || activeView === "wallet_categories"
+            }
             onClick={() => onViewChange("wallets")}
             tintClass="bg-emerald-600/30 text-emerald-200"
           >
@@ -340,26 +343,6 @@ export function AppSidebar({
                 strokeLinejoin="round"
                 strokeWidth={2}
                 d="M17 9V7a4 4 0 00-4-4H7a4 4 0 00-4 4v10a4 4 0 004 4h10a4 4 0 004-4V9h-4zM3 10h18M17 13h.01"
-              />
-            </svg>
-          </CollapsedSectionIcon>
-          <CollapsedSectionIcon
-            title="Categories"
-            active={activeView === "wallet_categories"}
-            onClick={() => onViewChange("wallet_categories")}
-            tintClass="bg-lime-600/30 text-lime-200"
-          >
-            <svg
-              className="h-4 w-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M7 7h.01M7 3h5c.53 0 1.04.21 1.41.59l7 7a2 2 0 010 2.82l-4.59 4.59a2 2 0 01-2.82 0l-7-7A2 2 0 015 9V4a1 1 0 011-1h1z"
               />
             </svg>
           </CollapsedSectionIcon>
@@ -662,17 +645,10 @@ export function AppSidebar({
           </div>
 
           <div className="mt-2 rounded-xl border border-slate-800/60 bg-slate-900/40 p-1">
-            <p className="px-3 py-1 text-xs font-medium uppercase tracking-wider text-slate-500">
-              Wallet
-            </p>
             <button
               type="button"
-              onClick={() => onViewChange("wallets")}
-              className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm font-medium transition ${
-                activeView === "wallets"
-                  ? "bg-indigo-600/25 text-white ring-1 ring-indigo-500/40"
-                  : "text-slate-200 hover:bg-slate-800/60"
-              }`}
+              onClick={() => setWalletOpen((o) => !o)}
+              className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-sm font-medium text-slate-200 hover:bg-slate-800/60"
             >
               <span className="flex min-w-0 items-center gap-2">
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600/30 text-emerald-200">
@@ -690,37 +666,37 @@ export function AppSidebar({
                     />
                   </svg>
                 </span>
-                <span className="truncate">Wallets</span>
+                <span className="truncate">Wallet</span>
               </span>
+              <Chevron open={walletOpen} />
             </button>
-            <button
-              type="button"
-              onClick={() => onViewChange("wallet_categories")}
-              className={`mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm font-medium transition ${
-                activeView === "wallet_categories"
-                  ? "bg-indigo-600/25 text-white ring-1 ring-indigo-500/40"
-                  : "text-slate-200 hover:bg-slate-800/60"
-              }`}
-            >
-              <span className="flex min-w-0 items-center gap-2">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-lime-600/30 text-lime-200">
-                  <svg
-                    className="h-4 w-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M7 7h.01M7 3h5c.53 0 1.04.21 1.41.59l7 7a2 2 0 010 2.82l-4.59 4.59a2 2 0 01-2.82 0l-7-7A2 2 0 015 9V4a1 1 0 011-1h1z"
-                    />
-                  </svg>
-                </span>
-                <span className="truncate">Categories</span>
-              </span>
-            </button>
+
+            {walletOpen && (
+              <div className="mt-1 space-y-0.5 border-t border-slate-800/60 pt-1">
+                <button
+                  type="button"
+                  onClick={() => onViewChange("wallets")}
+                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition ${
+                    activeView === "wallets"
+                      ? "bg-indigo-600/25 text-white ring-1 ring-indigo-500/40"
+                      : "text-slate-300 hover:bg-slate-800/80"
+                  }`}
+                >
+                  <span className="truncate">Wallets</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onViewChange("wallet_categories")}
+                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition ${
+                    activeView === "wallet_categories"
+                      ? "bg-indigo-600/25 text-white ring-1 ring-indigo-500/40"
+                      : "text-slate-300 hover:bg-slate-800/80"
+                  }`}
+                >
+                  <span className="truncate">Categories</span>
+                </button>
+              </div>
+            )}
           </div>
         </nav>
       )}
