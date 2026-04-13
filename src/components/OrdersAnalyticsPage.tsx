@@ -18,7 +18,7 @@ import {
   PieChart,
   ResponsiveContainer,
   Tooltip,
-  type TooltipProps,
+  type PieLabelRenderProps,
 } from "recharts";
 import { WILAYAS_58_LABELS } from "../constants/algeriaWilayas58";
 import { supabase } from "../lib/supabase";
@@ -41,15 +41,25 @@ function pct(numerator: number, denominator: number): number {
 
 type PieDatum = { name: string; value: number; fill: string };
 
-function DonutTooltip({
-  active,
-  payload,
-  sliceSum,
-}: TooltipProps<number, string> & { sliceSum: number }) {
+type DonutTooltipPayloadEntry = {
+  name?: string | number;
+  value?: number;
+  payload?: PieDatum;
+};
+
+type DonutTooltipProps = {
+  active?: boolean;
+  payload?: DonutTooltipPayloadEntry[];
+  sliceSum: number;
+};
+
+function DonutTooltip({ active, payload, sliceSum }: DonutTooltipProps) {
   if (!active || !payload?.length) return null;
   const row = payload[0];
-  const name = String(row.name ?? "");
-  const count = typeof row.value === "number" ? row.value : Number(row.value);
+  const name = String(row.name ?? row.payload?.name ?? "");
+  const raw = row.value;
+  const count =
+    typeof raw === "number" && Number.isFinite(raw) ? raw : Number(raw) || 0;
   const pct = sliceSum > 0 ? (count / sliceSum) * 100 : 0;
   return (
     <div className="rounded-lg border border-slate-600/80 bg-slate-900/95 px-3 py-2 text-sm shadow-xl ring-1 ring-white/10 backdrop-blur-sm">
@@ -79,37 +89,33 @@ function DonutChart({ title, segments }: { title: string; segments: Segment[] })
     [chartData]
   );
 
-  const renderSliceLabel = useCallback(
-    (props: {
-      cx: number;
-      cy: number;
-      midAngle: number;
-      innerRadius: number;
-      outerRadius: number;
-      percent: number;
-    }) => {
-      const p = props.percent;
-      if (p <= 0 || !Number.isFinite(p)) return null;
-      const RAD = Math.PI / 180;
-      const r = props.innerRadius + (props.outerRadius - props.innerRadius) * 0.55;
-      const x = props.cx + r * Math.cos(-props.midAngle * RAD);
-      const y = props.cy + r * Math.sin(-props.midAngle * RAD);
-      return (
-        <text
-          x={x}
-          y={y}
-          fill="#f8fafc"
-          textAnchor="middle"
-          dominantBaseline="central"
-          className="text-[11px] font-semibold tabular-nums"
-          style={{ paintOrder: "stroke", stroke: "rgba(15,23,42,0.85)", strokeWidth: 3 }}
-        >
-          {(p * 100).toFixed(1)}%
-        </text>
-      );
-    },
-    []
-  );
+  const renderSliceLabel = useCallback((props: PieLabelRenderProps) => {
+    const { cx, cy, midAngle, innerRadius, outerRadius, percent } = props;
+    const cxNum = (cx as number) ?? 0;
+    const cyNum = (cy as number) ?? 0;
+    const midNum = (midAngle as number) ?? 0;
+    const innerNum = (innerRadius as number) ?? 0;
+    const outerNum = (outerRadius as number) ?? 0;
+    const pct = (percent as number) ?? 0;
+    if (pct <= 0 || !Number.isFinite(pct)) return null;
+    const RAD = Math.PI / 180;
+    const r = innerNum + (outerNum - innerNum) * 0.55;
+    const x = cxNum + r * Math.cos(-midNum * RAD);
+    const y = cyNum + r * Math.sin(-midNum * RAD);
+    return (
+      <text
+        x={x}
+        y={y}
+        fill="#f8fafc"
+        textAnchor="middle"
+        dominantBaseline="central"
+        className="text-[11px] font-semibold tabular-nums"
+        style={{ paintOrder: "stroke", stroke: "rgba(15,23,42,0.85)", strokeWidth: 3 }}
+      >
+        {(pct * 100).toFixed(1)}%
+      </text>
+    );
+  }, []);
 
   return (
     <div className="rounded-2xl border border-slate-800/80 bg-slate-900/50 p-4 ring-1 ring-white/5">
