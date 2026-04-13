@@ -677,6 +677,83 @@ export function AppSidebar({
           <div className="mt-2 rounded-xl border border-slate-800/60 bg-slate-900/40 p-1">
             <button
               type="button"
+              onClick={() => setAnalyticsOpen((o) => !o)}
+              className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-sm font-medium text-slate-200 hover:bg-slate-800/60"
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-fuchsia-600/30 text-fuchsia-200">
+                  <svg
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M11 19V6m0 13l-4-4m4 4l4-4M5 5h14"
+                    />
+                  </svg>
+                </span>
+                <span className="truncate">Analytics</span>
+              </span>
+              <Chevron open={analyticsOpen} />
+            </button>
+
+            {analyticsOpen && (
+              <div className="mt-1 space-y-0.5 border-t border-slate-800/60 pt-1">
+                <button
+                  type="button"
+                  onClick={() => onViewChange("analytics_orders")}
+                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition ${
+                    activeView === "analytics_orders"
+                      ? "bg-indigo-600/25 text-white ring-1 ring-indigo-500/40"
+                      : "text-slate-300 hover:bg-slate-800/80"
+                  }`}
+                >
+                  <span className="truncate">Orders Analytics</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onViewChange("analytics_sales_channels")}
+                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition ${
+                    activeView === "analytics_sales_channels"
+                      ? "bg-indigo-600/25 text-white ring-1 ring-indigo-500/40"
+                      : "text-slate-300 hover:bg-slate-800/80"
+                  }`}
+                >
+                  <span className="truncate">Sales Channels Analytics</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onViewChange("analytics_products")}
+                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition ${
+                    activeView === "analytics_products"
+                      ? "bg-indigo-600/25 text-white ring-1 ring-indigo-500/40"
+                      : "text-slate-300 hover:bg-slate-800/80"
+                  }`}
+                >
+                  <span className="truncate">Products Analytics</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onViewChange("analytics_delivery_companies")}
+                  className={`flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition ${
+                    activeView === "analytics_delivery_companies"
+                      ? "bg-indigo-600/25 text-white ring-1 ring-indigo-500/40"
+                      : "text-slate-300 hover:bg-slate-800/80"
+                  }`}
+                >
+                  <span className="truncate">Delivery Companies Analytics</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-2 rounded-xl border border-slate-800/60 bg-slate-900/40 p-1">
+            <button
+              type="button"
               onClick={() => setWalletOpen((o) => !o)}
               className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-sm font-medium text-slate-200 hover:bg-slate-800/60"
             >

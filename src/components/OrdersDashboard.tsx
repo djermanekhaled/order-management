@@ -37,11 +37,15 @@ import type {
 import type { DeliveryCompany } from "../types/deliveryCompany";
 import { AppSidebar } from "./AppSidebar";
 import { DashboardPage } from "./DashboardPage";
+import { DeliveryCompaniesAnalyticsPage } from "./DeliveryCompaniesAnalyticsPage";
 import { DeliveryCompaniesPage } from "./DeliveryCompaniesPage";
 import { OrderFormModal } from "./OrderFormModal";
 import { OrderHistoryPanel } from "./OrderHistoryPanel";
 import { InventoryPage } from "./InventoryPage";
+import { OrdersAnalyticsPage } from "./OrdersAnalyticsPage";
+import { ProductsAnalyticsPage } from "./ProductsAnalyticsPage";
 import { ProductsPage } from "./ProductsPage";
+import { SalesChannelsAnalyticsPage } from "./SalesChannelsAnalyticsPage";
 import { SalesChannelsPage } from "./SalesChannelsPage";
 import { WalletCategoriesPage } from "./WalletCategoriesPage";
 import { WalletsPage } from "./WalletsPage";
@@ -147,6 +151,10 @@ export function OrdersDashboard() {
     | "tracking_orders"
     | "wallets"
     | "wallet_categories"
+    | "analytics_orders"
+    | "analytics_sales_channels"
+    | "analytics_products"
+    | "analytics_delivery_companies"
   >("dashboard");
   const [channelModalOpen, setChannelModalOpen] = useState(false);
   const [productModalOpen, setProductModalOpen] = useState(false);
@@ -821,6 +829,14 @@ export function OrdersDashboard() {
                     ? "wallets"
                     : sidebarView === "wallet_categories"
                       ? "wallet_categories"
+                      : sidebarView === "analytics_orders"
+                        ? "analytics_orders"
+                        : sidebarView === "analytics_sales_channels"
+                          ? "analytics_sales_channels"
+                          : sidebarView === "analytics_products"
+                            ? "analytics_products"
+                            : sidebarView === "analytics_delivery_companies"
+                              ? "analytics_delivery_companies"
                   : sidebarView === "tracking_orders"
                     ? "tracking_orders"
                   : "orders"
@@ -834,6 +850,12 @@ export function OrdersDashboard() {
           else if (v === "inventory") setSidebarView("inventory");
           else if (v === "wallets") setSidebarView("wallets");
           else if (v === "wallet_categories") setSidebarView("wallet_categories");
+          else if (v === "analytics_orders") setSidebarView("analytics_orders");
+          else if (v === "analytics_sales_channels")
+            setSidebarView("analytics_sales_channels");
+          else if (v === "analytics_products") setSidebarView("analytics_products");
+          else if (v === "analytics_delivery_companies")
+            setSidebarView("analytics_delivery_companies");
           else if (v === "tracking_orders") {
             setSidebarView("tracking_orders");
             setNavKey("follow");
@@ -931,6 +953,14 @@ export function OrdersDashboard() {
           <WalletsPage />
         ) : sidebarView === "wallet_categories" ? (
           <WalletCategoriesPage />
+        ) : sidebarView === "analytics_orders" ? (
+          <OrdersAnalyticsPage />
+        ) : sidebarView === "analytics_sales_channels" ? (
+          <SalesChannelsAnalyticsPage />
+        ) : sidebarView === "analytics_products" ? (
+          <ProductsAnalyticsPage />
+        ) : sidebarView === "analytics_delivery_companies" ? (
+          <DeliveryCompaniesAnalyticsPage />
         ) : (
           <>
         {error && (
